@@ -1,0 +1,56 @@
+@import '@fontsource/space-grotesk/400.css';
+@import '@fontsource/space-grotesk/500.css';
+@import '@fontsource/space-grotesk/700.css';
+@import '@fontsource/ibm-plex-mono/400.css';
+@import 'tailwindcss';
+
+:root {
+  color-scheme: dark;
+  font-family: 'Space Grotesk', sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  --bg: #08111d;
+  --panel: rgba(10, 24, 41, 0.8);
+  --panel-strong: rgba(12, 28, 48, 0.92);
+  --line: rgba(140, 178, 217, 0.16);
+  --line-strong: rgba(140, 178, 217, 0.28);
+  --text: #edf4ff;
+  --muted: #91a7c4;
+  --accent: #ff8552;
+  --accent-soft: rgba(255, 133, 82, 0.18);
+  --success: #5cd6a4;
+  --warning: #ffd166;
+  --shadow: 0 28px 90px rgba(0, 0, 0, 0.38);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+  color: var(--text);
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+::selection {
+  background: rgba(255, 133, 82, 0.28);
+}
