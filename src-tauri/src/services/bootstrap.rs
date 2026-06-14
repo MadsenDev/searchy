@@ -43,7 +43,10 @@ pub fn ensure_daemon_running(socket_path: &PathBuf, db_path: &PathBuf) -> Result
 
     let acquired_lock = spawn_lock.is_ok();
     if acquired_lock {
-        spawn_daemon_process(socket_path, db_path)?;
+        if let Err(error) = spawn_daemon_process(socket_path, db_path) {
+            let _ = fs::remove_file(&lock_path);
+            return Err(error);
+        }
     }
 
     for _ in 0..25 {

@@ -651,7 +651,8 @@ fn query_entries_with_like(
     );
 
     let mut params = vec![exact, prefix, contains];
-    let mut next_param = 4 + hidden_filter_params.len() as i32;
+    params.extend(hidden_filter_params);
+    let mut next_param = 4 + (params.len() as i32 - 3);
 
     for token in tokens {
         sql.push_str(&format!(
@@ -676,7 +677,6 @@ fn query_entries_with_like(
         sql.push_str(" AND ");
         sql.push_str(&clause);
     }
-    params.extend(hidden_filter_params);
 
     if parsed.exact && tokens.len() == 1 {
         sql.push_str(&format!(" AND name_lower = ?{next_param}"));
@@ -987,7 +987,7 @@ fn query_entries_filtered_only(
     }
 
     let mut all_params = params;
-    let next_param = all_params.len() as i32 + 1;
+    let mut next_param = all_params.len() as i32 + 1;
     for token in parsed.negated_search_terms() {
         sql.push_str(&format!(
             " AND name_lower NOT LIKE ?{next_param} AND lower(path) NOT LIKE ?{}",
@@ -995,6 +995,7 @@ fn query_entries_filtered_only(
         ));
         all_params.push(format!("%{token}%"));
         all_params.push(format!("%{token}%"));
+        next_param += 2;
     }
 
     let limit_param = all_params.len() as i32 + 1;

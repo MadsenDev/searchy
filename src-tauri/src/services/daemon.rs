@@ -342,8 +342,9 @@ impl DaemonService {
                     if !enabled {
                         let _ = db::remove_entries_for_prefix(&self.db_path, &path);
                     }
+                    let snapshot = status_snapshot_for_daemon(&self.db_path, &self.status);
                     if let Ok(mut status) = self.status.lock() {
-                        *status = status_snapshot_for_daemon(&self.db_path, &self.status);
+                        *status = snapshot;
                     }
                     DaemonResponse::Ack
                 }
@@ -383,8 +384,9 @@ impl DaemonService {
             {
                 Ok(()) => {
                     self.refresh_watchers();
+                    let snapshot = status_snapshot_for_daemon(&self.db_path, &self.status);
                     if let Ok(mut status) = self.status.lock() {
-                        *status = status_snapshot_for_daemon(&self.db_path, &self.status);
+                        *status = snapshot;
                     }
                     DaemonResponse::Ack
                 }
