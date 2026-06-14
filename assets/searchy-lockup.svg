@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="740" height="210" viewBox="0 0 740 210">
+
+<defs><linearGradient id="mg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff9d6b"></stop><stop offset="1" stop-color="#f4713c"></stop></linearGradient></defs>
+
+<g transform="translate(92,45) scale(1.25)">
+  <rect x="8" y="8" width="80" height="80" rx="23" fill="url(#mg)"></rect>
+  <polyline points="33,35 47,48 33,61" fill="none" stroke="#08111d" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"></polyline>
+  <rect x="51" y="54" width="16" height="7" rx="3.5" fill="#08111d"></rect></g>
+<text x="238" y="141" font-family="SG" font-weight="700" font-size="104" letter-spacing="-3" fill="#edf4ff">Searchy<tspan fill="#ff8552">_</tspan></text>
+</svg>

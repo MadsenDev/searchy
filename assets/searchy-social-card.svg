@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+
+<defs>
+  <radialGradient id="bg" cx="0.78" cy="-0.1" r="1.0"><stop offset="0" stop-color="#11283f"></stop><stop offset="0.62" stop-color="#08111d"></stop></radialGradient>
+  <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#ff8552" stop-opacity="0.22"></stop><stop offset="0.62" stop-color="#ff8552" stop-opacity="0"></stop></radialGradient>
+  <linearGradient id="mg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff9d6b"></stop><stop offset="1" stop-color="#f4713c"></stop></linearGradient>
+</defs>
+<rect width="1280" height="640" fill="url(#bg)"></rect>
+<circle cx="1130" cy="60" r="380" fill="url(#glow)"></circle>
+<g transform="translate(980,360) rotate(-8)" opacity="0.10">
+  <g transform="translate(-280,-280) scale(5.8)">
+    <rect x="8" y="8" width="80" height="80" rx="23" fill="none" stroke="#ff8552" stroke-width="3"></rect>
+    <polyline points="33,35 47,48 33,61" fill="none" stroke="#ff8552" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"></polyline>
+    <rect x="51" y="54" width="16" height="7" rx="3.5" fill="#ff8552"></rect></g>
+</g>
+<g transform="translate(96,150) scale(1.6458333333333333)">
+    <rect x="8" y="8" width="80" height="80" rx="23" fill="url(#mg)"></rect>
+    <polyline points="33,35 47,48 33,61" fill="none" stroke="#08111d" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"></polyline>
+    <rect x="51" y="54" width="16" height="7" rx="3.5" fill="#08111d"></rect></g>
+<text x="284" y="278" font-family="SG" font-weight="700" font-size="132" letter-spacing="-4" fill="#edf4ff">Searchy<tspan fill="#ff8552">_</tspan></text>
+<text x="100" y="382" font-family="SG" font-weight="500" font-size="42" letter-spacing="-0.4" fill="#edf4ff">Find any file. Instantly.</text>
+<text x="102" y="430" font-family="Mono" font-weight="400" font-size="19" letter-spacing="4.9" fill="#91a7c4">FILENAME-FIRST SEARCH · LINUX-FIRST · TAURI</text>
+<text x="100" y="586" font-family="Mono" font-weight="400" font-size="20" letter-spacing="0.4" fill="#91a7c4">github.com/<tspan fill="#ff8552">MadsenDev/searchy</tspan></text>
+</svg>
