@@ -36,6 +36,7 @@ export type StatusSnapshot = {
   launcherShortcutEnabled: boolean
   sessionType: string
   desktop: string
+  inotifyLimitWarning: boolean
 }
 
 export type AppSettings = {

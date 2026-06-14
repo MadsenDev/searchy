@@ -163,6 +163,7 @@ fn main() {
             commands::settings::remove_exclude_rule,
             commands::actions::open_path,
             commands::actions::reveal_path,
+            commands::actions::record_open,
             commands::status::rebuild_index,
         ])
         .on_window_event(|window, event| {
@@ -194,6 +195,7 @@ fn main() {
                 launcher_shortcut_enabled: false,
                 session_type: String::new(),
                 desktop: String::new(),
+                inotify_limit_warning: false,
             });
             snapshot.launcher_shortcut_enabled = state.launcher_shortcut_enabled;
             snapshot.session_type = state.session_type.clone();

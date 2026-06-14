@@ -9,6 +9,7 @@ use crate::services::{bootstrap, client};
 pub async fn search(
     query: String,
     max_results: Option<usize>,
+    root: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Vec<SearchResult>, String> {
     let db_path = state.db_path.clone();
@@ -17,7 +18,7 @@ pub async fn search(
 
     spawn_blocking(move || {
         bootstrap::ensure_daemon_running_app(&socket_path, &db_path)?;
-        client::search(&socket_path, query, limit)
+        client::search(&socket_path, query, limit, root)
     })
         .await
         .map_err(|error| error.to_string())?
