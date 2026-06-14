@@ -36,6 +36,7 @@ const fallbackStatus: StatusSnapshot = {
   launcherShortcutEnabled: false,
   sessionType: '',
   desktop: '',
+  inotifyLimitWarning: false,
 }
 
 const fallbackSettings: AppSettings = {
@@ -79,13 +80,19 @@ function hasTauriRuntime() {
   return 'window' in globalThis && '__TAURI_INTERNALS__' in window
 }
 
-export async function search(query: string, maxResults: number) {
+export async function search(query: string, maxResults: number, root?: string | null) {
   const invoke = await getInvoke()
   if (!invoke) {
     const lowered = query.toLowerCase()
     return fallbackResults.filter((entry) => entry.name.toLowerCase().includes(lowered)).slice(0, maxResults)
   }
-  return invoke<SearchResult[]>('search', { query, maxResults })
+  return invoke<SearchResult[]>('search', { query, maxResults, root: root ?? null })
+}
+
+export async function recordOpen(path: string) {
+  const invoke = await getInvoke()
+  if (!invoke) return
+  return invoke<void>('record_open', { path })
 }
 
 export async function getStatus() {

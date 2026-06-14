@@ -28,11 +28,19 @@ fn send_request(socket_path: &Path, request: &DaemonRequest) -> AppResult<Daemon
         .map_err(|error| AppError::Message(format!("failed to decode daemon response: {error}")))
 }
 
-pub fn search(socket_path: &Path, query: String, max_results: usize) -> AppResult<Vec<SearchResult>> {
-    match send_request(socket_path, &DaemonRequest::Search { query, max_results })? {
+pub fn search(socket_path: &Path, query: String, max_results: usize, root: Option<String>) -> AppResult<Vec<SearchResult>> {
+    match send_request(socket_path, &DaemonRequest::Search { query, max_results, root })? {
         DaemonResponse::SearchResults(results) => Ok(results),
         DaemonResponse::Error(error) => Err(AppError::Message(error)),
         _ => Err(AppError::Message("unexpected daemon response for search".to_string())),
+    }
+}
+
+pub fn record_open(socket_path: &Path, path: String) -> AppResult<()> {
+    match send_request(socket_path, &DaemonRequest::RecordOpen { path })? {
+        DaemonResponse::Ack => Ok(()),
+        DaemonResponse::Error(error) => Err(AppError::Message(error)),
+        _ => Err(AppError::Message("unexpected response for record_open".to_string())),
     }
 }
 

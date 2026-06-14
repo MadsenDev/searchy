@@ -113,12 +113,65 @@ pub fn initialize(db_path: &Path) -> AppResult<()> {
     connection.execute("ALTER TABLE roots ADD COLUMN last_error TEXT", []).ok();
     connection.execute("ALTER TABLE roots ADD COLUMN watcher_error TEXT", []).ok();
 
+    connection.execute("ALTER TABLE indexed_entries ADD COLUMN name_initials TEXT", []).ok();
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_indexed_entries_name_initials ON indexed_entries(name_initials)",
+        [],
+    ).ok();
+    connection.execute(
+        "ALTER TABLE indexed_entries ADD COLUMN open_count INTEGER NOT NULL DEFAULT 0",
+        [],
+    ).ok();
+
     seed_default_settings(&connection)?;
     Ok(())
 }
 
 pub fn open(db_path: &Path) -> AppResult<Connection> {
     Ok(Connection::open(db_path)?)
+}
+
+fn compute_initials(name: &str) -> String {
+    use std::path::Path as StdPath;
+    let stem = StdPath::new(name)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or(name);
+
+    let mut result = String::new();
+    let mut at_word_start = true;
+    let mut prev_lower = false;
+
+    for ch in stem.chars() {
+        if ch == '_' || ch == '-' || ch == '.' || ch == ' ' {
+            at_word_start = true;
+            prev_lower = false;
+            continue;
+        }
+        if ch.is_ascii_alphabetic() {
+            let is_upper = ch.is_ascii_uppercase();
+            let camel_boundary = is_upper && prev_lower;
+            if at_word_start || camel_boundary {
+                result.push(ch.to_ascii_lowercase());
+                at_word_start = false;
+            }
+            prev_lower = !is_upper;
+        } else {
+            at_word_start = false;
+            prev_lower = false;
+        }
+    }
+
+    result
+}
+
+pub fn record_open(db_path: &Path, path: &str) -> AppResult<()> {
+    let connection = open(db_path)?;
+    connection.execute(
+        "UPDATE indexed_entries SET open_count = open_count + 1 WHERE path = ?1",
+        params![path],
+    )?;
+    Ok(())
 }
 
 pub fn list_roots(db_path: &Path) -> AppResult<Vec<RootRecord>> {
@@ -396,6 +449,7 @@ pub fn status_snapshot(db_path: &Path) -> AppResult<IndexStatus> {
         launcher_shortcut_enabled: false,
         session_type: String::new(),
         desktop: String::new(),
+        inotify_limit_warning: false,
     })
 }
 
@@ -453,6 +507,7 @@ pub fn insert_or_replace_entry(
         .extension()
         .map(|part| part.to_string_lossy().to_string());
     let name_lower = name.to_lowercase();
+    let name_initials = compute_initials(&name);
     let modified_unix = metadata.modified().ok().and_then(system_time_to_unix);
     let created_unix = metadata.created().ok().and_then(system_time_to_unix);
     let size_bytes = i64::try_from(metadata.len()).ok();
@@ -460,14 +515,15 @@ pub fn insert_or_replace_entry(
     connection.execute(
         "
         INSERT INTO indexed_entries (
-            path, parent_path, name, name_lower, extension, is_dir, size_bytes,
+            path, parent_path, name, name_lower, name_initials, extension, is_dir, size_bytes,
             modified_unix, created_unix, inode, dev, last_seen_scan_id, status
         )
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, NULL, NULL, ?10, 'active')
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, NULL, NULL, ?11, 'active')
         ON CONFLICT(path) DO UPDATE SET
             parent_path = excluded.parent_path,
             name = excluded.name,
             name_lower = excluded.name_lower,
+            name_initials = excluded.name_initials,
             extension = excluded.extension,
             is_dir = excluded.is_dir,
             size_bytes = excluded.size_bytes,
@@ -481,6 +537,7 @@ pub fn insert_or_replace_entry(
             parent_path,
             name,
             name_lower,
+            name_initials,
             extension,
             if metadata.is_dir() { 1 } else { 0 },
             size_bytes,
@@ -526,6 +583,7 @@ pub fn upsert_entry(connection: &Connection, path: &Path, metadata: &std::fs::Me
         .extension()
         .map(|part| part.to_string_lossy().to_string());
     let name_lower = name.to_lowercase();
+    let name_initials = compute_initials(&name);
     let modified_unix = metadata.modified().ok().and_then(system_time_to_unix);
     let created_unix = metadata.created().ok().and_then(system_time_to_unix);
     let size_bytes = i64::try_from(metadata.len()).ok();
@@ -533,14 +591,15 @@ pub fn upsert_entry(connection: &Connection, path: &Path, metadata: &std::fs::Me
     connection.execute(
         "
         INSERT INTO indexed_entries (
-            path, parent_path, name, name_lower, extension, is_dir, size_bytes,
+            path, parent_path, name, name_lower, name_initials, extension, is_dir, size_bytes,
             modified_unix, created_unix, inode, dev, last_seen_scan_id, status
         )
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, NULL, NULL, NULL, 'active')
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, NULL, NULL, NULL, 'active')
         ON CONFLICT(path) DO UPDATE SET
             parent_path = excluded.parent_path,
             name = excluded.name,
             name_lower = excluded.name_lower,
+            name_initials = excluded.name_initials,
             extension = excluded.extension,
             is_dir = excluded.is_dir,
             size_bytes = excluded.size_bytes,
@@ -553,6 +612,7 @@ pub fn upsert_entry(connection: &Connection, path: &Path, metadata: &std::fs::Me
             parent_path,
             name,
             name_lower,
+            name_initials,
             extension,
             if metadata.is_dir() { 1 } else { 0 },
             size_bytes,
@@ -568,6 +628,7 @@ pub fn query_entries(
     db_path: &Path,
     query: &str,
     max_results: usize,
+    root: Option<&str>,
 ) -> AppResult<Vec<SearchResult>> {
     let connection = open(db_path)?;
     let parsed = parse_query(query);
@@ -578,7 +639,7 @@ pub fn query_entries(
     let search_terms = parsed.search_terms();
     let token_refs = search_terms.iter().map(String::as_str).collect::<Vec<_>>();
 
-    if !search_terms.is_empty() && fts_ready(&connection)? && token_refs.iter().all(|token| token.len() >= 3) {
+    let mut results = if !search_terms.is_empty() && fts_ready(&connection)? && token_refs.iter().all(|token| token.len() >= 3) {
         let prefers_path_search = parsed.prefers_path_search()
             || token_refs.iter().any(|token| token.contains('/'));
         let name_results = query_entries_with_fts(
@@ -588,6 +649,7 @@ pub fn query_entries(
             &token_refs,
             max_results,
             SearchScope::Name,
+            root,
         )?;
 
         if prefers_path_search || name_results.is_empty() {
@@ -598,20 +660,31 @@ pub fn query_entries(
                 &token_refs,
                 max_results,
                 SearchScope::Path,
+                root,
             )?;
-            return Ok(merge_results(name_results, path_results, max_results as usize));
+            merge_results(name_results, path_results, max_results as usize)
+        } else {
+            name_results
         }
+    } else {
+        query_entries_with_like(
+            &connection,
+            &parsed,
+            &search_terms.join(" "),
+            &token_refs,
+            max_results,
+            root,
+        )?
+    };
 
-        return Ok(name_results);
+    // Acronym/initials boost: merge initials results for short all-alpha queries
+    let raw_query = search_terms.join(" ");
+    if raw_query.len() <= 5 && raw_query.chars().all(|c| c.is_ascii_alphabetic()) {
+        let initials_results = query_entries_by_initials(&connection, &raw_query, max_results, root)?;
+        results = merge_results(results, initials_results, max_results as usize);
     }
 
-    query_entries_with_like(
-        &connection,
-        &parsed,
-        &search_terms.join(" "),
-        &token_refs,
-        max_results,
-    )
+    Ok(results)
 }
 
 fn query_entries_with_like(
@@ -620,9 +693,10 @@ fn query_entries_with_like(
     normalized: &str,
     tokens: &[&str],
     max_results: i64,
+    root: Option<&str>,
 ) -> AppResult<Vec<SearchResult>> {
     if tokens.is_empty() {
-        return query_entries_filtered_only(connection, parsed, max_results);
+        return query_entries_filtered_only(connection, parsed, max_results, root);
     }
 
     let exact = normalized.to_string();
@@ -672,7 +746,14 @@ fn query_entries_with_like(
         next_param += 2;
     }
 
-    sql.push_str(") AS score FROM indexed_entries WHERE status = 'active'");
+    sql.push_str(
+        "
+                + CASE WHEN open_count > 10 THEN 100
+                       WHEN open_count > 5  THEN 70
+                       WHEN open_count > 0  THEN 40
+                       ELSE 0 END
+        ) AS score FROM indexed_entries WHERE status = 'active'"
+    );
     for clause in hidden_filter_clauses {
         sql.push_str(" AND ");
         sql.push_str(&clause);
@@ -699,6 +780,13 @@ fn query_entries_with_like(
         ));
         params.push(format!("%{token}%"));
         params.push(format!("%{token}%"));
+        next_param += 2;
+    }
+
+    if let Some(root_path) = root {
+        sql.push_str(&format!(" AND (path = ?{next_param} OR path LIKE ?{})", next_param + 1));
+        params.push(root_path.to_string());
+        params.push(format!("{root_path}/%"));
         next_param += 2;
     }
 
@@ -731,6 +819,7 @@ fn query_entries_with_fts(
     tokens: &[&str],
     max_results: i64,
     scope: SearchScope,
+    root: Option<&str>,
 ) -> AppResult<Vec<SearchResult>> {
     let exact = normalized.to_string();
     let prefix = format!("{normalized}%");
@@ -782,6 +871,10 @@ fn query_entries_with_fts(
 
     sql.push_str(
         "
+                + CASE WHEN ie.open_count > 10 THEN 100
+                       WHEN ie.open_count > 5  THEN 70
+                       WHEN ie.open_count > 0  THEN 40
+                       ELSE 0 END
             ) AS score
         FROM indexed_entries ie
         JOIN indexed_entries_fts fts ON fts.rowid = ie.id
@@ -801,6 +894,13 @@ fn query_entries_with_fts(
         ));
         params.push(format!("%{token}%"));
         params.push(format!("%{token}%"));
+        next_param += 2;
+    }
+
+    if let Some(root_path) = root {
+        sql.push_str(&format!(" AND (ie.path = ?{next_param} OR ie.path LIKE ?{})", next_param + 1));
+        params.push(root_path.to_string());
+        params.push(format!("{root_path}/%"));
         next_param += 2;
     }
 
@@ -837,6 +937,47 @@ fn build_fts_match_query(tokens: &[&str], scope: SearchScope) -> String {
         })
         .collect::<Vec<_>>()
         .join(" AND ")
+}
+
+fn query_entries_by_initials(
+    connection: &Connection,
+    initials: &str,
+    max_results: i64,
+    root: Option<&str>,
+) -> AppResult<Vec<SearchResult>> {
+    let exact = initials.to_lowercase();
+    let prefix = format!("{}%", exact);
+    let mut sql = String::from(
+        "SELECT path, parent_path, name, extension, is_dir, modified_unix,
+                CASE WHEN name_initials = ?1 THEN 500
+                     WHEN name_initials LIKE ?2 THEN 350
+                     ELSE 0 END AS score
+         FROM indexed_entries
+         WHERE status = 'active' AND name_initials IS NOT NULL
+           AND (name_initials = ?1 OR name_initials LIKE ?2)"
+    );
+    let mut params: Vec<String> = vec![exact, prefix];
+    if let Some(root_path) = root {
+        sql.push_str(" AND (path = ?3 OR path LIKE ?4)");
+        params.push(root_path.to_string());
+        params.push(format!("{root_path}/%"));
+    }
+    sql.push_str(" ORDER BY score DESC, is_dir DESC, LENGTH(name) ASC LIMIT ?");
+    params.push(max_results.to_string());
+
+    let mut stmt = connection.prepare(&sql)?;
+    let rows = stmt.query_map(params_from_iter(params.iter()), |row| {
+        Ok(SearchResult {
+            path: row.get(0)?,
+            parent_path: row.get(1)?,
+            name: row.get(2)?,
+            extension: row.get(3)?,
+            is_dir: row.get::<_, i64>(4)? != 0,
+            modified_unix: row.get(5)?,
+            score: row.get(6)?,
+        })
+    })?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(AppError::from)
 }
 
 fn merge_results(
@@ -964,6 +1105,7 @@ fn query_entries_filtered_only(
     connection: &Connection,
     parsed: &ParsedQuery,
     max_results: i64,
+    root: Option<&str>,
 ) -> AppResult<Vec<SearchResult>> {
     let (filter_clauses, params) = build_filter_sql(parsed, "indexed_entries", 1);
     let mut sql = String::from(
@@ -975,7 +1117,10 @@ fn query_entries_filtered_only(
             extension,
             is_dir,
             modified_unix,
-            0 AS score
+            (CASE WHEN open_count > 10 THEN 100
+                  WHEN open_count > 5  THEN 70
+                  WHEN open_count > 0  THEN 40
+                  ELSE 0 END) AS score
         FROM indexed_entries
         WHERE status = 'active'
         ",
@@ -998,9 +1143,16 @@ fn query_entries_filtered_only(
         next_param += 2;
     }
 
-    let limit_param = all_params.len() as i32 + 1;
+    if let Some(root_path) = root {
+        sql.push_str(&format!(" AND (path = ?{next_param} OR path LIKE ?{})", next_param + 1));
+        all_params.push(root_path.to_string());
+        all_params.push(format!("{root_path}/%"));
+        next_param += 2;
+    }
+
+    let limit_param = next_param;
     sql.push_str(&format!(
-        " ORDER BY is_dir DESC, COALESCE(modified_unix, 0) DESC, LENGTH(name) ASC LIMIT ?{limit_param}"
+        " ORDER BY score DESC, is_dir DESC, COALESCE(modified_unix, 0) DESC, LENGTH(name) ASC LIMIT ?{limit_param}"
     ));
     all_params.push(max_results.to_string());
 

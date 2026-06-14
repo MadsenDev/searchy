@@ -67,6 +67,7 @@ pub struct IndexStatus {
     pub launcher_shortcut_enabled: bool,
     pub session_type: String,
     pub desktop: String,
+    pub inotify_limit_warning: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

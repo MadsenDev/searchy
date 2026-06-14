@@ -5,7 +5,7 @@ use crate::core::state::{AppSettings, ExcludeRule, IndexStatus, RootRecord, Sear
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "method", content = "params", rename_all = "snake_case")]
 pub enum DaemonRequest {
-    Search { query: String, max_results: usize },
+    Search { query: String, max_results: usize, root: Option<String> },
     GetStatus,
     GetRoots,
     AddRoot { path: String },
@@ -35,6 +35,7 @@ pub enum DaemonRequest {
         enabled: bool,
     },
     RemoveExcludeRule { id: i64 },
+    RecordOpen { path: String },
 }
 
 #[derive(Debug, Serialize, Deserialize)]

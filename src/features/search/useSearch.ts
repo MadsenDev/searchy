@@ -3,7 +3,7 @@ import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 import { search } from '../../lib/tauri'
 import type { AppSettings, SearchResult } from '../../lib/types'
 
-export function useSearch(query: string, settings: AppSettings | null) {
+export function useSearch(query: string, settings: AppSettings | null, root: string | null = null) {
   const debouncedQuery = useDebouncedValue(query, 60)
   const [results, setResults] = useState<SearchResult[]>([])
   const [loading, setLoading] = useState(false)
@@ -21,7 +21,7 @@ export function useSearch(query: string, settings: AppSettings | null) {
     let cancelled = false
     setLoading(true)
 
-    search(debouncedQuery, settings.maxResults)
+    search(debouncedQuery, settings.maxResults, root)
       .then((next) => {
         if (!cancelled) {
           setResults(next)
@@ -36,7 +36,7 @@ export function useSearch(query: string, settings: AppSettings | null) {
     return () => {
       cancelled = true
     }
-  }, [debouncedQuery, settings])
+  }, [debouncedQuery, settings, root])
 
   return { loading, results }
 }
