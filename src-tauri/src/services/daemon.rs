@@ -242,6 +242,8 @@ impl DaemonService {
                 );
             }
         }
+
+        check_inotify_limit(&self.db_path, &self.status);
     }
 
     fn rebuild_all(&self) -> AppResult<()> {
@@ -265,14 +267,14 @@ impl DaemonService {
 
     fn handle_request(&self, request: DaemonRequest) -> DaemonResponse {
         match request {
-            DaemonRequest::Search { query: raw_query, max_results } => {
+            DaemonRequest::Search { query: raw_query, max_results, root } => {
                 let rules = match db::list_exclude_rules(&self.db_path)
                     .and_then(ExclusionMatcher::new)
                 {
                     Ok(matcher) => matcher,
                     Err(error) => return DaemonResponse::Error(error.to_string()),
                 };
-                match query::search(&self.db_path, &raw_query, max_results) {
+                match query::search(&self.db_path, &raw_query, max_results, root.as_deref()) {
                     Ok(results) => {
                         let filtered = results
                             .into_iter()
@@ -448,6 +450,12 @@ impl DaemonService {
                 Ok(()) => DaemonResponse::Ack,
                 Err(error) => DaemonResponse::Error(error.to_string()),
             },
+            DaemonRequest::RecordOpen { path } => {
+                match db::record_open(&self.db_path, &path) {
+                    Ok(()) => DaemonResponse::Ack,
+                    Err(error) => DaemonResponse::Error(error.to_string()),
+                }
+            }
         }
     }
 }
@@ -652,6 +660,7 @@ fn status_snapshot_for_daemon(db_path: &Path, status: &Arc<Mutex<IndexStatus>>) 
             snapshot.phase = current.phase.clone();
             snapshot.message = current.message.clone();
         }
+        snapshot.inotify_limit_warning = current.inotify_limit_warning;
     }
 
     if snapshot.watcher_state == "updating" || snapshot.watcher_state == "rebuilding" {
@@ -679,6 +688,35 @@ fn update_runtime_status(status: &Arc<Mutex<IndexStatus>>, phase: &str, message:
         current.message = message.to_string();
         current.daemon_connected = true;
         current.daemon_state = "ready".to_string();
+    }
+}
+
+fn check_inotify_limit(db_path: &Path, status: &Arc<Mutex<IndexStatus>>) {
+    let max_watches: u64 = std::fs::read_to_string("/proc/sys/fs/inotify/max_user_watches")
+        .ok()
+        .and_then(|s| s.trim().parse().ok())
+        .unwrap_or(8192);
+
+    let dir_count: u64 = match db::open(db_path) {
+        Ok(connection) => connection
+            .query_row("SELECT COUNT(*) FROM indexed_entries WHERE is_dir = 1", [], |row| {
+                row.get::<_, i64>(0)
+            })
+            .unwrap_or(0) as u64,
+        Err(_) => 0,
+    };
+
+    let warning = dir_count > max_watches * 8 / 10;
+    if let Ok(mut current) = status.lock() {
+        current.inotify_limit_warning = warning;
+        if warning {
+            current.message = format!(
+                "{} inotify watch limit approaching ({}/{} directories)",
+                current.message.trim_end_matches(|c: char| c == ' '),
+                dir_count,
+                max_watches
+            );
+        }
     }
 }
 

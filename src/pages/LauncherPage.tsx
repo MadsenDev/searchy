@@ -16,6 +16,7 @@ import {
   openPath,
   pickDirectory,
   rebuildIndex,
+  recordOpen,
   removeRoot,
   revealPath,
   removeExcludeRule,
@@ -193,10 +194,12 @@ export function LauncherPage() {
   const [rootBusy, setRootBusy] = useState(false)
   const [rootError, setRootError] = useState<string | null>(null)
   const [selectedIndex, setSelectedIndex] = useState(0)
+  const [scopeRoot, setScopeRoot] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const syntax = parseSearchSyntax(query)
   const effectiveQuery = syntax.cleanQuery
-  const { loading, results } = useSearch(effectiveQuery, settings)
+  const enabledRoots = roots.filter((r) => r.enabled)
+  const { loading, results } = useSearch(effectiveQuery, settings, scopeRoot)
   const hideOnDismiss = status?.launcherShortcutEnabled ?? false
   const syntaxExamples = getSearchSyntaxExamples()
   const isJokeMode = Boolean(syntax.jokeTheme)
@@ -273,6 +276,7 @@ export function LauncherPage() {
       setQuery('')
       setSelectedIndex(0)
       setActivePanel(null)
+      setScopeRoot(null)
       window.setTimeout(() => {
         inputRef.current?.focus()
       }, 10)
@@ -289,6 +293,12 @@ export function LauncherPage() {
   useEffect(() => {
     setSelectedIndex(0)
   }, [results])
+
+  useEffect(() => {
+    if (scopeRoot !== null && !enabledRoots.some((r) => r.path === scopeRoot)) {
+      setScopeRoot(null)
+    }
+  }, [roots, scopeRoot, enabledRoots])
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -332,6 +342,7 @@ export function LauncherPage() {
 
       if (event.key === 'Enter' && results[selectedIndex]) {
         event.preventDefault()
+        void recordOpen(results[selectedIndex].path)
         if (hideOnDismiss) {
           void hideLauncherWindow().then(() => openPath(results[selectedIndex].path))
         } else {
@@ -507,6 +518,29 @@ export function LauncherPage() {
                     ) : null}
                   </div>
                   <div className="flex items-center gap-2">
+                    {enabledRoots.length > 1 ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (scopeRoot === null) {
+                            setScopeRoot(enabledRoots[0].path)
+                          } else {
+                            const currentIndex = enabledRoots.findIndex((r) => r.path === scopeRoot)
+                            const nextIndex = currentIndex + 1
+                            if (nextIndex >= enabledRoots.length) {
+                              setScopeRoot(null)
+                            } else {
+                              setScopeRoot(enabledRoots[nextIndex].path)
+                            }
+                          }
+                        }}
+                        className={compactButtonClass}
+                      >
+                        {scopeRoot === null
+                          ? 'Everything'
+                          : scopeRoot.split('/').filter(Boolean).pop() ?? scopeRoot}
+                      </button>
+                    ) : null}
                     <button type="button" onClick={() => setActivePanel('roots')} className={compactButtonClass}>
                       Roots
                     </button>
@@ -589,6 +623,15 @@ export function LauncherPage() {
               ) : null}
             </div>
 
+            {status?.inotifyLimitWarning ? (
+              <div className="mt-2 rounded-[1rem] border border-amber-400/20 bg-amber-400/8 px-3 py-2 text-[11px] text-amber-200">
+                inotify watch limit approaching — run:{' '}
+                <code className="rounded bg-white/8 px-1.5 py-0.5 font-['IBM_Plex_Mono'] text-amber-100">
+                  sudo sysctl fs.inotify.max_user_watches=524288
+                </code>
+              </div>
+            ) : null}
+
             <div className="mt-2 min-h-0 min-w-0 flex-1 overflow-hidden">
               {!trimmedQuery ? (
                 <PlaceholderResults hasRoots={hasRoots} status={status} />
@@ -613,7 +656,7 @@ export function LauncherPage() {
                   results={results}
                   query={effectiveQuery}
                   theme={syntax.jokeTheme}
-                  onOpen={(path) => void openPath(path)}
+                  onOpen={(path) => { void recordOpen(path); void openPath(path) }}
                   onReveal={(path) => void revealPath(path)}
                   selectedIndex={selectedIndex}
                   setSelectedIndex={setSelectedIndex}

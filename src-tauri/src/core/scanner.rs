@@ -1,10 +1,9 @@
 use std::{
-    fs,
     path::Path,
     sync::{Arc, Mutex},
 };
 
-use walkdir::WalkDir;
+use jwalk::WalkDir;
 
 use crate::core::{
     db,
@@ -75,27 +74,27 @@ fn scan_roots(
             continue;
         }
 
-        for entry in WalkDir::new(root_path).follow_links(false) {
+        for entry in WalkDir::new(root_path).skip_hidden(false) {
             match entry {
                 Ok(entry) => {
                     let path = entry.path();
 
-                    if should_skip(path) {
+                    if should_skip(&path) {
                         continue;
                     }
 
-                    if matcher.is_excluded(path, entry.file_type().is_dir()) {
+                    if matcher.is_excluded(&path, entry.file_type().is_dir()) {
                         continue;
                     }
 
-                    match fs::metadata(path) {
+                    match entry.metadata() {
                         Ok(metadata) => {
                             if metadata.is_dir() {
                                 dirs_seen += 1;
                             } else {
                                 files_seen += 1;
                             }
-                            db::insert_or_replace_entry(&tx, scan_id, path, &metadata)?;
+                            db::insert_or_replace_entry(&tx, scan_id, &path, &metadata)?;
                         }
                         Err(_) => {
                             errors_count += 1;
@@ -144,24 +143,24 @@ pub fn scan_path_recursive(db_path: &Path, path: &Path) -> AppResult<()> {
     let connection = db::open(db_path)?;
 
     if path.is_file() {
-        let metadata = fs::metadata(path)?;
+        let metadata = path.metadata()?;
         if !matcher.is_excluded(path, metadata.is_dir()) {
             db::upsert_entry(&connection, path, &metadata)?;
         }
         return Ok(());
     }
 
-    for entry in WalkDir::new(path).follow_links(false) {
+    for entry in WalkDir::new(path).skip_hidden(false) {
         let entry = match entry {
             Ok(entry) => entry,
             Err(_) => continue,
         };
         let entry_path = entry.path();
-        if should_skip(entry_path) || matcher.is_excluded(entry_path, entry.file_type().is_dir()) {
+        if should_skip(&entry_path) || matcher.is_excluded(&entry_path, entry.file_type().is_dir()) {
             continue;
         }
-        if let Ok(metadata) = fs::metadata(entry_path) {
-            db::upsert_entry(&connection, entry_path, &metadata)?;
+        if let Ok(metadata) = entry.metadata() {
+            db::upsert_entry(&connection, &entry_path, &metadata)?;
         }
     }
 
