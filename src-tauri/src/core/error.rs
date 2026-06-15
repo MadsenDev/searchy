@@ -8,8 +8,6 @@ pub enum AppError {
     Database(#[from] rusqlite::Error),
     #[error("io error: {0}")]
     Io(#[from] io::Error),
-    #[error("walkdir error: {0}")]
-    Walkdir(#[from] walkdir::Error),
     #[error("invalid numeric conversion: {0}")]
     IntConversion(#[from] TryFromIntError),
     #[error("{0}")]

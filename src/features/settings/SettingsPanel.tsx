@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { getAutostartEnabled, setAutostartEnabled } from '../../lib/tauri'
 import type { AppSettings, ExcludeRule, StatusSnapshot } from '../../lib/types'
 
 export function SettingsPanel({
@@ -21,6 +22,16 @@ export function SettingsPanel({
   const [pattern, setPattern] = useState('')
   const [ruleType, setRuleType] = useState('glob')
   const [appliesTo, setAppliesTo] = useState('both')
+  const [autostart, setAutostart] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    getAutostartEnabled().then(setAutostart).catch(() => setAutostart(false))
+  }, [])
+
+  async function handleAutostartToggle(enabled: boolean) {
+    await setAutostartEnabled(enabled)
+    setAutostart(enabled)
+  }
 
   if (!settings) {
     return null
@@ -77,6 +88,18 @@ export function SettingsPanel({
           </label>
         ))}
       </div>
+
+      {autostart !== null && (
+        <label className="mt-3 flex items-center justify-between gap-3 rounded-[1.4rem] border border-white/8 bg-white/[0.03] px-4 py-3 text-sm text-slate-100">
+          <span>Start on login</span>
+          <input
+            type="checkbox"
+            checked={autostart}
+            onChange={(event) => handleAutostartToggle(event.target.checked)}
+            className="h-4 w-4 accent-[var(--accent)]"
+          />
+        </label>
+      )}
 
       <div className="mt-5 rounded-[1.5rem] border border-white/8 bg-white/[0.03] p-4">
         <div className="flex items-center justify-between gap-3">
