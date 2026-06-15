@@ -10,11 +10,13 @@ use std::{
 };
 
 use directories::ProjectDirs;
-use tauri::{AppHandle, Emitter, Manager, WebviewWindow, WindowEvent};
-
-use crate::core::{
-    state::{AppState, IndexStatus},
+use tauri::{
+    menu::{Menu, MenuItem, PredefinedMenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    AppHandle, Emitter, Manager, WebviewWindow, WindowEvent,
 };
+
+use crate::core::state::{AppState, IndexStatus};
 use crate::services::{bootstrap, client, daemon};
 
 #[cfg(desktop)]
@@ -52,7 +54,6 @@ fn toggle_launcher(app: &AppHandle) -> tauri::Result<()> {
             show_launcher(&window)?;
         }
     }
-
     Ok(())
 }
 
@@ -62,10 +63,6 @@ fn session_type() -> String {
 
 fn current_desktop() -> String {
     env::var("XDG_CURRENT_DESKTOP").unwrap_or_default()
-}
-
-fn shortcut_supported_in_session() -> bool {
-    session_type() != "wayland"
 }
 
 fn daemon_arg_value(args: &[String], key: &str) -> Option<PathBuf> {
@@ -89,6 +86,35 @@ fn register_launcher_shortcut(app: &AppHandle) -> Result<(), String> {
     app.plugin(plugin).map_err(|error| error.to_string())
 }
 
+/// Registers the global launcher shortcut via the XDG Desktop Portal on Wayland.
+/// Shows a compositor-native permission dialog on first use. Supported by
+/// KDE Plasma 5.27+, GNOME 48+, and Hyprland; degrades silently on Sway/wlroots.
+#[cfg(target_os = "linux")]
+async fn setup_wayland_shortcut(app: AppHandle) -> Result<(), ashpd::Error> {
+    use ashpd::desktop::global_shortcuts::{GlobalShortcuts, NewShortcut};
+    use futures_util::StreamExt;
+
+    let proxy = GlobalShortcuts::new().await?;
+    let session = proxy.create_session(Default::default()).await?;
+
+    proxy
+        .bind_shortcuts(
+            &session,
+            &[NewShortcut::new("toggle-launcher", "Toggle Searchy launcher")
+                .preferred_trigger(Some("ctrl+space"))],
+            None,
+            Default::default(),
+        )
+        .await?;
+
+    let mut stream = proxy.receive_activated().await?;
+    while let Some(_activation) = stream.next().await {
+        let _ = toggle_launcher(&app);
+    }
+
+    Ok(())
+}
+
 fn main() {
     let args = env::args().collect::<Vec<_>>();
     if args.iter().any(|arg| arg == "--daemon") {
@@ -105,7 +131,6 @@ fn main() {
     let socket_path = app_socket_path();
     let session_type = session_type();
     let desktop = current_desktop();
-    let launcher_shortcut_enabled = shortcut_supported_in_session();
 
     let daemon_boot_error = bootstrap::ensure_daemon_running(&socket_path, &db_path).err();
 
@@ -128,12 +153,12 @@ fn main() {
                 "starting".to_string()
             },
             watcher_state: "starting".to_string(),
-            launcher_shortcut_enabled,
+            launcher_shortcut_enabled: true,
             session_type: session_type.clone(),
             desktop: desktop.clone(),
             ..IndexStatus::default()
         })),
-        launcher_shortcut_enabled,
+        launcher_shortcut_enabled: true,
         session_type,
         desktop,
     };
@@ -146,6 +171,10 @@ fn main() {
                     .expect("main window should exist for single-instance activation"),
             );
         }))
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .manage(state)
         .invoke_handler(tauri::generate_handler![
             commands::search::search,
@@ -165,11 +194,12 @@ fn main() {
             commands::actions::reveal_path,
             commands::actions::record_open,
             commands::status::rebuild_index,
+            commands::system::get_autostart_enabled,
+            commands::system::set_autostart_enabled,
         ])
         .on_window_event(|window, event| {
-            let state = window.state::<AppState>();
-            if state.launcher_shortcut_enabled
-                && window.label() == "main"
+            // Always hide to tray instead of closing — quit via the tray menu.
+            if window.label() == "main"
                 && matches!(event, WindowEvent::CloseRequested { .. })
             {
                 window.hide().ok();
@@ -192,34 +222,68 @@ fn main() {
                 watcher_state: "unknown".to_string(),
                 watcher_error_count: 0,
                 offline_roots: Vec::new(),
-                launcher_shortcut_enabled: false,
+                launcher_shortcut_enabled: true,
                 session_type: String::new(),
                 desktop: String::new(),
                 inotify_limit_warning: false,
             });
-            snapshot.launcher_shortcut_enabled = state.launcher_shortcut_enabled;
+            snapshot.launcher_shortcut_enabled = true;
             snapshot.session_type = state.session_type.clone();
             snapshot.desktop = state.desktop.clone();
             if let Ok(mut status) = state.status.lock() {
                 *status = snapshot;
             }
 
+            // System tray
+            let show_i = MenuItem::with_id(app, "show", "Show Searchy", true, None::<&str>)?;
+            let sep = PredefinedMenuItem::separator(app)?;
+            let quit_i = MenuItem::with_id(app, "quit", "Quit Searchy", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show_i, &sep, &quit_i])?;
+            TrayIconBuilder::new()
+                .icon(app.default_window_icon().expect("app icon should be bundled").clone())
+                .tooltip("Searchy")
+                .menu(&menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| match event.id().as_ref() {
+                    "show" => {
+                        if let Some(w) = app.get_webview_window("main") {
+                            let _ = show_launcher(&w);
+                        }
+                    }
+                    "quit" => app.exit(0),
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        let _ = toggle_launcher(tray.app_handle());
+                    }
+                })
+                .build(app)?;
+
+            let is_wayland = state.session_type == "wayland";
+
+            // X11 / non-Wayland: register Ctrl+Space via global-shortcut plugin
             #[cfg(desktop)]
-            if state.launcher_shortcut_enabled {
+            if !is_wayland {
                 if let Err(error) = register_launcher_shortcut(app.handle()) {
                     eprintln!("failed to register Ctrl+Space launcher shortcut: {error}");
-                    if let Some(window) = app.get_webview_window("main") {
-                        show_launcher(&window)?;
+                }
+            }
+
+            // Wayland: register via XDG GlobalShortcuts portal (async, compositor dialog)
+            #[cfg(target_os = "linux")]
+            if is_wayland {
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(e) = setup_wayland_shortcut(app_handle).await {
+                        eprintln!("Wayland global shortcut portal failed: {e}");
                     }
-                }
-            } else {
-                eprintln!(
-                    "global launcher shortcut disabled for session type '{}' on desktop '{}'",
-                    state.session_type, state.desktop
-                );
-                if let Some(window) = app.get_webview_window("main") {
-                    show_launcher(&window)?;
-                }
+                });
             }
 
             Ok(())

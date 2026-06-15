@@ -234,6 +234,18 @@ export async function onLauncherShown(callback: () => void) {
   return unlisten
 }
 
+export async function getAutostartEnabled(): Promise<boolean> {
+  const invoke = await getInvoke()
+  if (!invoke) return false
+  return invoke<boolean>('get_autostart_enabled')
+}
+
+export async function setAutostartEnabled(enabled: boolean): Promise<void> {
+  const invoke = await getInvoke()
+  if (!invoke) return
+  return invoke<void>('set_autostart_enabled', { enabled })
+}
+
 export async function pickDirectory() {
   if (!hasTauriRuntime()) {
     return null
