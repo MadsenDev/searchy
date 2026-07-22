@@ -55,18 +55,18 @@ export function SettingsPanel({
   }
 
   return (
-    <section className="rounded-[2rem] border border-white/8 bg-[var(--panel)] p-5 shadow-[var(--shadow)] backdrop-blur">
+    <section>
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="font-['IBM_Plex_Mono'] text-xs uppercase tracking-[0.28em] text-emerald-200/80">
+          <p className="font-['IBM_Plex_Mono'] text-xs uppercase tracking-[0.28em] text-[color:var(--accent)]">
             Settings
           </p>
-          <h2 className="mt-2 text-xl font-semibold text-white">Indexing controls</h2>
+          <h2 className="mt-2 text-xl font-semibold text-[color:var(--text)]">Indexing controls</h2>
         </div>
         <button
           type="button"
           onClick={onRebuild}
-          className="rounded-full border border-amber-300/25 px-4 py-2 text-xs font-medium uppercase tracking-[0.16em] text-amber-100"
+          className="rounded-full border border-[color:var(--line)] px-4 py-2 text-xs font-medium uppercase tracking-[0.16em] text-[color:var(--text)] hover:border-[color:var(--line-strong)]"
         >
           Rebuild index
         </button>
@@ -76,7 +76,7 @@ export function SettingsPanel({
         {toggles.map((toggle) => (
           <label
             key={toggle.key}
-            className="flex items-center justify-between gap-3 rounded-[1.4rem] border border-white/8 bg-white/[0.03] px-4 py-3 text-sm text-slate-100"
+            className="flex items-center justify-between gap-3 rounded-[1.4rem] border border-[color:var(--line-soft)] bg-[color:var(--chip-bg)] px-4 py-3 text-sm text-[color:var(--text)]"
           >
             <span>{toggle.label}</span>
             <input
@@ -90,7 +90,7 @@ export function SettingsPanel({
       </div>
 
       {autostart !== null && (
-        <label className="mt-3 flex items-center justify-between gap-3 rounded-[1.4rem] border border-white/8 bg-white/[0.03] px-4 py-3 text-sm text-slate-100">
+        <label className="mt-3 flex items-center justify-between gap-3 rounded-[1.4rem] border border-[color:var(--line-soft)] bg-[color:var(--chip-bg)] px-4 py-3 text-sm text-[color:var(--text)]">
           <span>Start on login</span>
           <input
             type="checkbox"
@@ -101,11 +101,11 @@ export function SettingsPanel({
         </label>
       )}
 
-      <div className="mt-5 rounded-[1.5rem] border border-white/8 bg-white/[0.03] p-4">
+      <div className="mt-5 rounded-[1.5rem] border border-[color:var(--line-soft)] bg-[color:var(--chip-bg)] p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h3 className="text-sm font-semibold text-white">Daemon status</h3>
-            <p className="mt-1 text-xs text-slate-400">
+            <h3 className="text-sm font-semibold text-[color:var(--text)]">Daemon status</h3>
+            <p className="mt-1 text-xs text-[color:var(--muted)]">
               {status?.daemonState || 'unknown'} · watcher {status?.watcherState || 'unknown'}
               {status?.watcherErrorCount ? ` · ${status.watcherErrorCount} watcher issue(s)` : ''}
             </p>
@@ -126,19 +126,19 @@ export function SettingsPanel({
           </p>
         ) : null}
         {status?.lastReconcileUnix ? (
-          <p className="mt-2 text-xs leading-5 text-slate-400">
+          <p className="mt-2 text-xs leading-5 text-[color:var(--muted)]">
             Last reconcile at {new Date(status.lastReconcileUnix * 1000).toLocaleString()}
           </p>
         ) : null}
       </div>
 
-      <div className="mt-5 rounded-[1.5rem] border border-white/8 bg-white/[0.03] p-4">
+      <div className="mt-5 rounded-[1.5rem] border border-[color:var(--line-soft)] bg-[color:var(--chip-bg)] p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h3 className="text-sm font-semibold text-white">Exclude rules</h3>
-            <p className="mt-1 text-xs text-slate-400">Applied during scans, watcher updates, and result cleanup.</p>
+            <h3 className="text-sm font-semibold text-[color:var(--text)]">Exclude rules</h3>
+            <p className="mt-1 text-xs text-[color:var(--muted)]">Applied during scans, watcher updates, and result cleanup.</p>
           </div>
-          <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300">
+          <span className="rounded-full border border-[color:var(--line-soft)] px-3 py-1 text-xs text-[color:var(--muted)]">
             {excludeRules.length} rule{excludeRules.length === 1 ? '' : 's'}
           </span>
         </div>
@@ -148,12 +148,12 @@ export function SettingsPanel({
             value={pattern}
             onChange={(event) => setPattern(event.target.value)}
             placeholder="node_modules or ^/home/chris/.cache"
-            className="min-w-0 rounded-[1rem] border border-white/10 bg-slate-950/30 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500"
+            className="min-w-0 rounded-[1rem] border border-[color:var(--line-soft)] bg-[color:var(--field-bg)] px-4 py-3 text-sm text-[color:var(--text)] outline-none focus:border-[color:var(--accent)]"
           />
           <select
             value={ruleType}
             onChange={(event) => setRuleType(event.target.value)}
-            className="rounded-[1rem] border border-white/10 bg-slate-950/30 px-3 py-3 text-sm text-white outline-none"
+            className="rounded-[1rem] border border-[color:var(--line-soft)] bg-[color:var(--field-bg)] px-3 py-3 text-sm text-[color:var(--text)] outline-none"
           >
             <option value="glob">glob</option>
             <option value="prefix">prefix</option>
@@ -163,7 +163,7 @@ export function SettingsPanel({
           <select
             value={appliesTo}
             onChange={(event) => setAppliesTo(event.target.value)}
-            className="rounded-[1rem] border border-white/10 bg-slate-950/30 px-3 py-3 text-sm text-white outline-none"
+            className="rounded-[1rem] border border-[color:var(--line-soft)] bg-[color:var(--field-bg)] px-3 py-3 text-sm text-[color:var(--text)] outline-none"
           >
             <option value="both">both</option>
             <option value="dir">dir</option>
@@ -182,24 +182,24 @@ export function SettingsPanel({
           {excludeRules.map((rule) => (
             <div
               key={rule.id}
-              className="flex items-center justify-between gap-3 rounded-[1.2rem] border border-white/8 bg-slate-950/25 px-4 py-3"
+              className="flex items-center justify-between gap-3 rounded-[1.2rem] border border-[color:var(--line-soft)] bg-[color:var(--field-bg)] px-4 py-3"
             >
               <div className="min-w-0">
-                <div className="truncate text-sm font-medium text-white">{rule.pattern}</div>
-                <div className="mt-1 text-xs text-slate-400">
+                <div className="truncate text-sm font-medium text-[color:var(--text)]">{rule.pattern}</div>
+                <div className="mt-1 text-xs text-[color:var(--muted)]">
                   {rule.ruleType} · {rule.appliesTo} · {rule.enabled ? 'enabled' : 'disabled'}
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => onRemoveExcludeRule(rule.id)}
-                className="rounded-full border border-white/12 px-3 py-1 text-xs text-slate-300 hover:border-white/25"
+                className="rounded-full border border-[color:var(--line-soft)] px-3 py-1 text-xs text-[color:var(--muted)] hover:border-[color:var(--line-strong)]"
               >
                 Remove
               </button>
             </div>
           ))}
-          {!excludeRules.length ? <p className="text-xs text-slate-500">No exclude rules yet.</p> : null}
+          {!excludeRules.length ? <p className="text-xs text-[color:var(--faint)]">No exclude rules yet.</p> : null}
         </div>
       </div>
     </section>

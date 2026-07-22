@@ -12,17 +12,21 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   --bg: #08111d;
-  --panel: rgba(10, 24, 41, 0.8);
-  --panel-strong: rgba(12, 28, 48, 0.92);
-  --line: rgba(140, 178, 217, 0.16);
-  --line-strong: rgba(140, 178, 217, 0.28);
-  --text: #edf4ff;
-  --muted: #91a7c4;
+  --panel: rgba(11, 22, 38, 0.72);
+  --panel-strong: rgba(11, 22, 38, 0.72);
+  --line: rgba(140, 178, 217, 0.22);
+  --line-soft: rgba(140, 178, 217, 0.1);
+  --line-strong: rgba(140, 178, 217, 0.24);
+  --text: #eaf2ff;
+  --muted: #8ba3c2;
+  --faint: #5d7392;
   --accent: #ff8552;
   --accent-soft: rgba(255, 133, 82, 0.18);
+  --chip-bg: rgba(140, 178, 217, 0.09);
+  --field-bg: rgba(6, 12, 22, 0.35);
   --success: #5cd6a4;
   --warning: #ffd166;
-  --shadow: 0 28px 90px rgba(0, 0, 0, 0.38);
+  --shadow: 0 40px 120px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 * {
@@ -51,6 +55,35 @@ button {
   cursor: pointer;
 }
 
+input::placeholder {
+  color: var(--faint);
+}
+
 ::selection {
-  background: rgba(255, 133, 82, 0.28);
+  background: var(--accent-soft);
+}
+
+.blink {
+  animation: bl 1.05s steps(1) infinite;
+}
+
+@keyframes bl {
+  50% {
+    opacity: 0;
+  }
+}
+
+.row-appear {
+  animation: ra 0.22s ease both;
+}
+
+@keyframes ra {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
