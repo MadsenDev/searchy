@@ -5,18 +5,18 @@ import { ResultList } from '../features/results/ResultList'
 import { RootsPanel } from '../features/roots/RootsPanel'
 import { useSearch } from '../features/search/useSearch'
 import { SettingsPanel } from '../features/settings/SettingsPanel'
-import { ThemeControls } from '../features/theme/ThemeControls'
-import { controlButtonStyle } from '../features/theme/controlStyles'
 import { useAppTheme } from '../features/theme/useAppTheme'
 import { mix, rgba, type Theme } from '../lib/theme'
 import {
   addExcludeRule,
   addRoot,
+  closeWindow,
   getExcludeRules,
   getRoots,
   getSettings,
   getStatus,
   hideLauncherWindow,
+  minimizeWindow,
   onLauncherShown,
   openPath,
   pickDirectory,
@@ -25,6 +25,7 @@ import {
   removeRoot,
   revealPath,
   removeExcludeRule,
+  toggleMaximizeWindow,
   updateSetting,
   updateRoot,
   rescanRoot,
@@ -40,6 +41,53 @@ function formatUiError(error: unknown, fallback: string) {
     return error
   }
   return fallback
+}
+
+const ICONS = {
+  syntax: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8 9l-3 3 3 3M16 9l3 3-3 3M13 6l-2 12" />
+    </svg>
+  ),
+  roots: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 7a2 2 0 0 1 2-2h3.5l2 2H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+    </svg>
+  ),
+  settings: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 0 1-4 0v-.1a1.6 1.6 0 0 0-2.7-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z" />
+    </svg>
+  ),
+}
+
+function TitleIcon({
+  onClick,
+  title,
+  active,
+  children,
+}: {
+  onClick: () => void
+  title: string
+  active?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <button type="button" className="tbtn" data-active={active ? 'true' : 'false'} onClick={onClick} title={title}>
+      {children}
+    </button>
+  )
+}
+
+function WindowDots() {
+  return (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 4 }}>
+      <button type="button" className="wdot" style={{ background: '#febc2e' }} title="Minimize" onClick={() => void minimizeWindow()} />
+      <button type="button" className="wdot" style={{ background: '#28c840' }} title="Maximize" onClick={() => void toggleMaximizeWindow()} />
+      <button type="button" className="wdot" style={{ background: '#ff5f57' }} title="Close" onClick={() => void closeWindow()} />
+    </div>
+  )
 }
 
 function Hint({ k, label, t }: { k: string; label: string; t: Theme }) {
@@ -101,16 +149,7 @@ function EmptyState({
   return (
     <div style={{ padding: '34px 16px', textAlign: 'center' }}>
       <div style={{ fontSize: 14.5, color: t.muted }}>{title}</div>
-      <div
-        style={{
-          fontFamily: "'IBM Plex Mono', monospace",
-          fontSize: 11,
-          color: t.faint,
-          marginTop: 7,
-        }}
-      >
-        {detail}
-      </div>
+      <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: t.faint, marginTop: 7 }}>{detail}</div>
     </div>
   )
 }
@@ -138,9 +177,7 @@ function SlideOverPanel({
           position: 'absolute',
           inset: 0,
           zIndex: 20,
-          background: 'rgba(3,7,14,0.55)',
-          backdropFilter: 'blur(4px)',
-          WebkitBackdropFilter: 'blur(4px)',
+          background: t.mode === 'light' ? 'rgba(20,37,56,0.35)' : 'rgba(3,7,14,0.6)',
           transition: 'opacity .25s',
           opacity: open ? 1 : 0,
           pointerEvents: open ? 'auto' : 'none',
@@ -156,11 +193,9 @@ function SlideOverPanel({
           display: 'flex',
           flexDirection: 'column',
           width: '100%',
-          maxWidth: '34rem',
+          maxWidth: '30rem',
           padding: 16,
           background: t.panel,
-          backdropFilter: t.blur,
-          WebkitBackdropFilter: t.blur,
           borderLeft: '1px solid ' + t.panelBorder,
           boxShadow: t.shadow,
           transition: 'transform .3s ease, opacity .3s ease',
@@ -182,9 +217,7 @@ function SlideOverPanel({
             >
               {eyebrow}
             </p>
-            <h2 style={{ marginTop: 8, fontSize: 24, fontWeight: 600, letterSpacing: '-0.03em', color: t.text }}>
-              {title}
-            </h2>
+            <h2 style={{ marginTop: 8, fontSize: 22, fontWeight: 600, letterSpacing: '-0.03em', color: t.text }}>{title}</h2>
           </div>
           <button
             type="button"
@@ -233,12 +266,6 @@ export function LauncherPage() {
   const { loading, results } = useSearch(effectiveQuery, settings, scopeRoot)
   const hideOnDismiss = status?.launcherShortcutEnabled ?? false
   const syntaxExamples = getSearchSyntaxExamples()
-
-  const hi = mix(accent, '#ffffff', 0.2)
-  const lo = mix(accent, '#000000', 0.1)
-
-  const showAttentionBanner = Boolean(status && (status.watcherState !== 'healthy' || status.offlineRoots.length > 0))
-  const statusDotColor = showAttentionBanner ? t.mode === 'light' ? '#e0a03a' : '#ffd166' : accent
 
   function triggerFlash(name: string) {
     setFlash(name)
@@ -478,9 +505,7 @@ export function LauncherPage() {
   const hasRoots = roots.length > 0
   const showResults = Boolean(trimmedQuery) && !loading && results.length > 0
 
-  const btnStyle = controlButtonStyle(t)
-  const scopeLabel =
-    scopeRoot === null ? 'Everything' : scopeRoot.split('/').filter(Boolean).pop() ?? scopeRoot
+  const scopeLabel = scopeRoot === null ? 'Everything' : scopeRoot.split('/').filter(Boolean).pop() ?? scopeRoot
 
   function cycleScope() {
     if (scopeRoot === null) {
@@ -494,377 +519,300 @@ export function LauncherPage() {
 
   const chipStyle: CSSProperties = {
     fontFamily: "'IBM Plex Mono', monospace",
-    fontSize: 11,
+    fontSize: 10.5,
     color: accent,
     background: rgba(accent, 0.12),
     border: '1px solid ' + rgba(accent, 0.3),
     borderRadius: 7,
-    padding: '4px 9px',
+    padding: '3px 8px',
   }
 
   return (
-    <div
+    <section
       style={{
         position: 'relative',
         height: '100%',
-        display: 'grid',
-        placeItems: 'center',
+        width: '100%',
+        display: 'flex',
+        flexDirection: 'column',
         overflow: 'hidden',
-        background: 'transparent',
+        borderRadius: 14,
+        background: t.bg,
+        color: t.text,
+        border: '1px solid ' + t.panelBorder,
       }}
     >
-      {/* accent glow behind the panel */}
+      <JokeOverlay theme={syntax.jokeTheme} />
+
+      {/* title bar */}
       <div
+        data-tauri-drag-region
         style={{
-          position: 'absolute',
-          top: '-24%',
-          left: '14%',
-          width: 420,
-          height: 420,
-          borderRadius: '50%',
-          background: rgba(accent, t.glow[0]),
-          filter: 'blur(120px)',
-          pointerEvents: 'none',
-        }}
-      />
-      <div
-        style={{
-          position: 'absolute',
-          bottom: '-28%',
-          right: '10%',
-          width: 460,
-          height: 460,
-          borderRadius: '50%',
-          background: rgba(accent, t.glow[1]),
-          filter: 'blur(130px)',
-          pointerEvents: 'none',
-        }}
-      />
-
-      {/* fixed controls: management + theme + accent */}
-      <div style={{ position: 'fixed', top: 18, right: 18, zIndex: 20, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-        <button onClick={() => setShowSyntaxHelp((s) => !s)} style={btnStyle} title="Search syntax">
-          Syntax
-        </button>
-        <button onClick={() => setActivePanel('roots')} style={btnStyle}>
-          Roots
-        </button>
-        <button onClick={() => setActivePanel('settings')} style={btnStyle}>
-          Settings
-        </button>
-        <ThemeControls ac={accent} setAc={setAccent} t={t} mode={mode} setMode={setMode} />
-      </div>
-
-      <div style={{ width: '100%', padding: '0 24px', display: 'flex', justifyContent: 'center' }}>
-        <section
-          style={{
-            position: 'relative',
-            width: '100%',
-            maxWidth: 620,
-            borderRadius: 20,
-            overflow: 'hidden',
-            background: t.panel,
-            backdropFilter: t.blur,
-            WebkitBackdropFilter: t.blur,
-            border: '1px solid ' + t.panelBorder,
-            boxShadow: t.shadow,
-            display: 'flex',
-            flexDirection: 'column',
-            maxHeight: 500,
-          }}
-        >
-          <JokeOverlay theme={syntax.jokeTheme} />
-
-          {/* title bar */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              padding: '11px 16px',
-              borderBottom: '1px solid ' + t.lineSoft,
-            }}
-          >
-            <Mark size={19} hi={hi} lo={lo} knock={t.glyphKnock} gid="title" />
-            <span style={{ fontSize: 14, fontWeight: 600, letterSpacing: '-0.02em', color: t.text }}>
-              Searchy
-              <span style={{ color: accent }}>_</span>
-            </span>
-            <div style={{ marginLeft: 'auto', display: 'flex', gap: 7 }}>
-              <span style={{ width: 9, height: 9, borderRadius: 5, background: t.dotOff }} />
-              <span style={{ width: 9, height: 9, borderRadius: 5, background: t.dotOff }} />
-              <span
-                style={{ width: 9, height: 9, borderRadius: 5, background: statusDotColor }}
-                title={showAttentionBanner ? 'Watcher needs attention' : 'Healthy'}
-              />
-            </div>
-          </div>
-
-          {/* search */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '19px 20px' }}>
-            <SearchGlyph size={20} color={accent} />
-            <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center' }}>
-              <input
-                ref={inputRef}
-                autoFocus
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search files by name…"
-                style={{
-                  width: '100%',
-                  fontSize: 22,
-                  color: t.text,
-                  letterSpacing: '-0.01em',
-                  caretColor: accent,
-                  fontFamily: 'inherit',
-                  border: 'none',
-                  outline: 'none',
-                  background: 'none',
-                }}
-              />
-              {!query && (
-                <span
-                  className="blink"
-                  style={{ position: 'absolute', left: 0, fontSize: 22, color: accent, pointerEvents: 'none' }}
-                >
-                  ▏
-                </span>
-              )}
-            </div>
-            {enabledRoots.length > 1 && (
-              <button
-                type="button"
-                onClick={cycleScope}
-                style={{
-                  fontFamily: "'IBM Plex Mono', monospace",
-                  fontSize: 11,
-                  color: scopeRoot ? accent : t.muted,
-                  background: scopeRoot ? rgba(accent, 0.12) : t.chipBg,
-                  border: '1px solid ' + (scopeRoot ? rgba(accent, 0.3) : t.lineSoft),
-                  borderRadius: 7,
-                  padding: '4px 9px',
-                  flexShrink: 0,
-                  maxWidth: 150,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-                title="Cycle search scope"
-              >
-                {scopeLabel}
-              </button>
-            )}
-          </div>
-
-          {/* syntax chips */}
-          {syntax.chips.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 20px 8px' }}>
-              {syntax.chips.map((chip) => (
-                <span
-                  key={chip.key}
-                  style={{
-                    ...chipStyle,
-                    fontSize: 10.5,
-                    padding: '3px 8px',
-                    ...(chip.negated
-                      ? { color: '#ff9db3', background: 'rgba(255,93,143,0.12)', border: '1px solid rgba(255,93,143,0.3)' }
-                      : null),
-                  }}
-                >
-                  {chip.negated ? 'Not ' : ''}
-                  {chip.label}
-                </span>
-              ))}
-            </div>
-          )}
-
-          {/* syntax help */}
-          {showSyntaxHelp && (
-            <div style={{ padding: '0 20px 10px' }}>
-              <div
-                style={{
-                  borderRadius: 12,
-                  border: '1px solid ' + t.lineSoft,
-                  background: t.fieldBg,
-                  padding: '12px 14px',
-                }}
-              >
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {syntaxExamples.map((example) => (
-                    <button
-                      key={example}
-                      type="button"
-                      onClick={() => {
-                        setQuery(example)
-                        setShowSyntaxHelp(false)
-                        inputRef.current?.focus()
-                      }}
-                      style={{
-                        borderRadius: 999,
-                        border: '1px solid ' + t.lineSoft,
-                        padding: '5px 12px',
-                        fontFamily: "'IBM Plex Mono', monospace",
-                        fontSize: 11,
-                        color: t.muted,
-                        background: 'transparent',
-                      }}
-                    >
-                      {example}
-                    </button>
-                  ))}
-                </div>
-                <p style={{ marginTop: 10, fontSize: 12, lineHeight: 1.6, color: t.faint }}>
-                  Filters are optional — try ext:pdf, in:docs, type:folder, or hidden:false. Fun mode is visual only:
-                  is:joke synthwave, is:joke matrix, is:joke confetti.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* inotify warning */}
-          {status?.inotifyLimitWarning && (
-            <div style={{ padding: '0 20px 8px' }}>
-              <div
-                style={{
-                  borderRadius: 10,
-                  border: '1px solid rgba(255,209,102,0.25)',
-                  background: 'rgba(255,209,102,0.1)',
-                  padding: '8px 12px',
-                  fontSize: 11,
-                  color: t.mode === 'light' ? '#8a6d1f' : '#ffd88a',
-                }}
-              >
-                inotify watch limit approaching — run: sudo sysctl fs.inotify.max_user_watches=524288
-              </div>
-            </div>
-          )}
-
-          {/* results */}
-          <div style={{ flex: 1, minHeight: 0, maxHeight: 340, overflow: 'hidden', padding: '0 10px' }}>
-            {showResults ? (
-              <ResultList
-                results={results}
-                query={effectiveQuery}
-                t={t}
-                accent={accent}
-                onOpen={(path) => {
-                  const target = results.find((r) => r.path === path)
-                  if (target) {
-                    triggerFlash(target.name)
-                  }
-                  void recordOpen(path)
-                  if (hideOnDismiss) {
-                    void hideLauncherWindow().then(() => openPath(path))
-                  } else {
-                    void openPath(path)
-                  }
-                }}
-                selectedIndex={selectedIndex}
-                setSelectedIndex={setSelectedIndex}
-              />
-            ) : (
-              <EmptyState
-                t={t}
-                hasRoots={hasRoots}
-                status={status}
-                loading={Boolean(trimmedQuery) && loading}
-                query={trimmedQuery}
-                noMatches={Boolean(trimmedQuery) && !loading && results.length === 0}
-              />
-            )}
-          </div>
-
-          {/* footer */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 16,
-              padding: '11px 18px',
-              borderTop: '1px solid ' + t.lineSoft,
-              background: t.footerBg,
-              fontFamily: "'IBM Plex Mono', monospace",
-              fontSize: 11,
-              color: t.muted,
-              flexWrap: 'wrap',
-            }}
-          >
-            <Hint k="↑↓" label="navigate" t={t} />
-            <Hint k="↵" label="open" t={t} />
-            <Hint k="⌘↵" label="reveal" t={t} />
-            <Hint k="esc" label={hideOnDismiss ? 'hide' : 'clear'} t={t} />
-            <span style={{ marginLeft: 'auto', color: t.faint }}>
-              {flash ? (
-                <span style={{ color: accent }}>opening {flash}</span>
-              ) : loading && trimmedQuery ? (
-                'searching…'
-              ) : (
-                <>
-                  {results.length} result{results.length !== 1 ? 's' : ''}
-                </>
-              )}
-            </span>
-          </div>
-
-          <SlideOverPanel
-            t={t}
-            title="Indexed roots"
-            eyebrow="Management"
-            open={activePanel === 'roots'}
-            onClose={() => setActivePanel(null)}
-          >
-            <RootsPanel
-              roots={roots}
-              draftRoot={draftRoot}
-              setDraftRoot={setDraftRoot}
-              busy={rootBusy}
-              errorMessage={rootError}
-              onAddRoot={() => void handleAddRoot()}
-              onPickRoot={() => void handlePickRoot()}
-              onRemoveRoot={(path) => void handleRemoveRoot(path)}
-              onToggleRoot={(root, field, value) => void handleToggleRoot(root, field, value)}
-              onRescanRoot={(path) => void handleRescanRoot(path)}
-            />
-          </SlideOverPanel>
-
-          <SlideOverPanel
-            t={t}
-            title="Settings"
-            eyebrow="Management"
-            open={activePanel === 'settings'}
-            onClose={() => setActivePanel(null)}
-          >
-            <SettingsPanel
-              settings={settings}
-              status={status}
-              excludeRules={excludeRules}
-              onToggle={(key, value) => void handleToggle(key, value)}
-              onRebuild={() => void handleRebuild()}
-              onAddExcludeRule={(pattern, ruleType, appliesTo) => void handleAddExcludeRule(pattern, ruleType, appliesTo)}
-              onRemoveExcludeRule={(id) => void handleRemoveExcludeRule(id)}
-            />
-          </SlideOverPanel>
-        </section>
-      </div>
-
-      {/* caption */}
-      <div
-        style={{
-          position: 'absolute',
-          bottom: 16,
-          left: 0,
-          right: 0,
-          textAlign: 'center',
-          fontFamily: "'IBM Plex Mono', monospace",
-          fontSize: 10,
-          letterSpacing: '0.28em',
-          color: rgba(t.bd, 0.4),
-          textTransform: 'uppercase',
-          pointerEvents: 'none',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          padding: '10px 14px',
+          borderBottom: '1px solid ' + t.lineSoft,
         }}
       >
-        Searchy · filename-first file search
+        <Mark size={19} hi={mix(accent, '#ffffff', 0.2)} lo={mix(accent, '#000000', 0.1)} knock={t.glyphKnock} gid="title" />
+        <span style={{ fontSize: 14, fontWeight: 600, letterSpacing: '-0.02em', color: t.text }}>
+          Searchy
+          <span style={{ color: accent }}>_</span>
+        </span>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}>
+          <TitleIcon title="Search syntax" active={showSyntaxHelp} onClick={() => setShowSyntaxHelp((s) => !s)}>
+            {ICONS.syntax}
+          </TitleIcon>
+          <TitleIcon title="Indexed roots" active={activePanel === 'roots'} onClick={() => setActivePanel('roots')}>
+            {ICONS.roots}
+          </TitleIcon>
+          <TitleIcon title="Settings" active={activePanel === 'settings'} onClick={() => setActivePanel('settings')}>
+            {ICONS.settings}
+          </TitleIcon>
+          <WindowDots />
+        </div>
       </div>
-    </div>
+
+      {/* search */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '18px 20px' }}>
+        <SearchGlyph size={20} color={accent} />
+        <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center' }}>
+          <input
+            ref={inputRef}
+            autoFocus
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search files by name…"
+            style={{
+              width: '100%',
+              fontSize: 22,
+              color: t.text,
+              letterSpacing: '-0.01em',
+              caretColor: accent,
+              fontFamily: 'inherit',
+              border: 'none',
+              outline: 'none',
+              background: 'none',
+            }}
+          />
+          {!query && (
+            <span
+              className="blink"
+              style={{ position: 'absolute', left: 0, fontSize: 22, color: accent, pointerEvents: 'none' }}
+            >
+              ▏
+            </span>
+          )}
+        </div>
+        {enabledRoots.length > 1 && (
+          <button
+            type="button"
+            onClick={cycleScope}
+            style={{
+              fontFamily: "'IBM Plex Mono', monospace",
+              fontSize: 11,
+              color: scopeRoot ? accent : t.muted,
+              background: scopeRoot ? rgba(accent, 0.12) : t.chipBg,
+              border: '1px solid ' + (scopeRoot ? rgba(accent, 0.3) : t.lineSoft),
+              borderRadius: 7,
+              padding: '4px 9px',
+              flexShrink: 0,
+              maxWidth: 150,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+            title="Cycle search scope"
+          >
+            {scopeLabel}
+          </button>
+        )}
+      </div>
+
+      {/* syntax chips */}
+      {syntax.chips.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 20px 8px' }}>
+          {syntax.chips.map((chip) => (
+            <span
+              key={chip.key}
+              style={{
+                ...chipStyle,
+                ...(chip.negated
+                  ? { color: '#ff9db3', background: 'rgba(255,93,143,0.12)', border: '1px solid rgba(255,93,143,0.3)' }
+                  : null),
+              }}
+            >
+              {chip.negated ? 'Not ' : ''}
+              {chip.label}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* syntax help */}
+      {showSyntaxHelp && (
+        <div style={{ padding: '0 20px 10px' }}>
+          <div style={{ borderRadius: 12, border: '1px solid ' + t.lineSoft, background: t.fieldBg, padding: '12px 14px' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {syntaxExamples.map((example) => (
+                <button
+                  key={example}
+                  type="button"
+                  onClick={() => {
+                    setQuery(example)
+                    setShowSyntaxHelp(false)
+                    inputRef.current?.focus()
+                  }}
+                  style={{
+                    borderRadius: 999,
+                    border: '1px solid ' + t.lineSoft,
+                    padding: '5px 12px',
+                    fontFamily: "'IBM Plex Mono', monospace",
+                    fontSize: 11,
+                    color: t.muted,
+                    background: 'transparent',
+                  }}
+                >
+                  {example}
+                </button>
+              ))}
+            </div>
+            <p style={{ marginTop: 10, fontSize: 12, lineHeight: 1.6, color: t.faint }}>
+              Filters are optional — try ext:pdf, in:docs, type:folder, or hidden:false. Fun mode is visual only: is:joke
+              synthwave, is:joke matrix, is:joke confetti.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* inotify warning */}
+      {status?.inotifyLimitWarning && (
+        <div style={{ padding: '0 20px 8px' }}>
+          <div
+            style={{
+              borderRadius: 10,
+              border: '1px solid rgba(255,209,102,0.25)',
+              background: 'rgba(255,209,102,0.1)',
+              padding: '8px 12px',
+              fontSize: 11,
+              color: t.mode === 'light' ? '#8a6d1f' : '#ffd88a',
+            }}
+          >
+            inotify watch limit approaching — run: sudo sysctl fs.inotify.max_user_watches=524288
+          </div>
+        </div>
+      )}
+
+      {/* results */}
+      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', padding: '0 10px' }}>
+        {showResults ? (
+          <ResultList
+            results={results}
+            query={effectiveQuery}
+            t={t}
+            accent={accent}
+            onOpen={(path) => {
+              const target = results.find((r) => r.path === path)
+              if (target) {
+                triggerFlash(target.name)
+              }
+              void recordOpen(path)
+              if (hideOnDismiss) {
+                void hideLauncherWindow().then(() => openPath(path))
+              } else {
+                void openPath(path)
+              }
+            }}
+            selectedIndex={selectedIndex}
+            setSelectedIndex={setSelectedIndex}
+          />
+        ) : (
+          <EmptyState
+            t={t}
+            hasRoots={hasRoots}
+            status={status}
+            loading={Boolean(trimmedQuery) && loading}
+            query={trimmedQuery}
+            noMatches={Boolean(trimmedQuery) && !loading && results.length === 0}
+          />
+        )}
+      </div>
+
+      {/* footer */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 16,
+          padding: '10px 18px',
+          borderTop: '1px solid ' + t.lineSoft,
+          background: t.footerBg,
+          fontFamily: "'IBM Plex Mono', monospace",
+          fontSize: 11,
+          color: t.muted,
+          flexWrap: 'wrap',
+        }}
+      >
+        <Hint k="↑↓" label="navigate" t={t} />
+        <Hint k="↵" label="open" t={t} />
+        <Hint k="⌘↵" label="reveal" t={t} />
+        <Hint k="esc" label={hideOnDismiss ? 'hide' : 'clear'} t={t} />
+        <span style={{ marginLeft: 'auto', color: t.faint }}>
+          {flash ? (
+            <span style={{ color: accent }}>opening {flash}</span>
+          ) : loading && trimmedQuery ? (
+            'searching…'
+          ) : (
+            <>
+              {results.length} result{results.length !== 1 ? 's' : ''}
+            </>
+          )}
+        </span>
+      </div>
+
+      <SlideOverPanel
+        t={t}
+        title="Indexed roots"
+        eyebrow="Management"
+        open={activePanel === 'roots'}
+        onClose={() => setActivePanel(null)}
+      >
+        <RootsPanel
+          roots={roots}
+          draftRoot={draftRoot}
+          setDraftRoot={setDraftRoot}
+          busy={rootBusy}
+          errorMessage={rootError}
+          onAddRoot={() => void handleAddRoot()}
+          onPickRoot={() => void handlePickRoot()}
+          onRemoveRoot={(path) => void handleRemoveRoot(path)}
+          onToggleRoot={(root, field, value) => void handleToggleRoot(root, field, value)}
+          onRescanRoot={(path) => void handleRescanRoot(path)}
+        />
+      </SlideOverPanel>
+
+      <SlideOverPanel
+        t={t}
+        title="Settings"
+        eyebrow="Management"
+        open={activePanel === 'settings'}
+        onClose={() => setActivePanel(null)}
+      >
+        <SettingsPanel
+          settings={settings}
+          status={status}
+          excludeRules={excludeRules}
+          mode={mode}
+          setMode={setMode}
+          accent={accent}
+          setAccent={setAccent}
+          onToggle={(key, value) => void handleToggle(key, value)}
+          onRebuild={() => void handleRebuild()}
+          onAddExcludeRule={(pattern, ruleType, appliesTo) => void handleAddExcludeRule(pattern, ruleType, appliesTo)}
+          onRemoveExcludeRule={(id) => void handleRemoveExcludeRule(id)}
+        />
+      </SlideOverPanel>
+    </section>
   )
 }
