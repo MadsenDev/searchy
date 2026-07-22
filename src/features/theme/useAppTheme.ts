@@ -44,6 +44,7 @@ export function useAppTheme() {
 
     set('--accent', accent)
     set('--accent-soft', rgba(accent, mode === 'light' ? 0.16 : 0.18))
+    set('--bg', theme.bg)
     set('--text', theme.text)
     set('--muted', theme.muted)
     set('--faint', theme.faint)

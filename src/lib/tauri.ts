@@ -224,6 +224,34 @@ export async function hideLauncherWindow() {
   return mod.getCurrentWindow().hide()
 }
 
+export async function minimizeWindow() {
+  if (!hasTauriRuntime()) {
+    return
+  }
+
+  const mod = await import('@tauri-apps/api/window')
+  return mod.getCurrentWindow().minimize()
+}
+
+export async function toggleMaximizeWindow() {
+  if (!hasTauriRuntime()) {
+    return
+  }
+
+  const mod = await import('@tauri-apps/api/window')
+  return mod.getCurrentWindow().toggleMaximize()
+}
+
+export async function closeWindow() {
+  if (!hasTauriRuntime()) {
+    return
+  }
+
+  // The Rust side intercepts CloseRequested and hides to tray (quit via tray menu).
+  const mod = await import('@tauri-apps/api/window')
+  return mod.getCurrentWindow().close()
+}
+
 export async function onLauncherShown(callback: () => void) {
   if (!hasTauriRuntime()) {
     return () => {}
