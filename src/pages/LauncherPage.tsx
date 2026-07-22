@@ -1,9 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { JokeOverlay } from '../components/JokeOverlay'
+import { Mark, SearchGlyph } from '../components/Glyphs'
 import { ResultList } from '../features/results/ResultList'
 import { RootsPanel } from '../features/roots/RootsPanel'
 import { useSearch } from '../features/search/useSearch'
 import { SettingsPanel } from '../features/settings/SettingsPanel'
+import { ThemeControls } from '../features/theme/ThemeControls'
+import { controlButtonStyle } from '../features/theme/controlStyles'
+import { useAppTheme } from '../features/theme/useAppTheme'
+import { mix, rgba, type Theme } from '../lib/theme'
 import {
   addExcludeRule,
   addRoot,
@@ -31,101 +36,94 @@ function formatUiError(error: unknown, fallback: string) {
   if (error instanceof Error && error.message) {
     return error.message
   }
-
   if (typeof error === 'string' && error.trim()) {
     return error
   }
-
   return fallback
 }
 
-function SearchStateCard({
-  eyebrow,
-  title,
-  body,
-  tone = 'default',
-  detail,
-}: {
-  eyebrow: string
-  title: string
-  body: string
-  tone?: 'default' | 'loading' | 'empty'
-  detail?: string
-}) {
-  const toneClass =
-    tone === 'loading'
-      ? 'border-amber-300/18 bg-[linear-gradient(180deg,rgba(255,209,102,0.08),rgba(255,255,255,0.03))]'
-      : tone === 'empty'
-        ? 'border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.025))]'
-        : 'border-dashed border-white/12 bg-white/[0.02]'
-
+function Hint({ k, label, t }: { k: string; label: string; t: Theme }) {
   return (
-    <div className={`rounded-[1.8rem] px-5 py-5 sm:px-6 sm:py-6 ${toneClass}`}>
-      <p className="font-['IBM_Plex_Mono'] text-[11px] uppercase tracking-[0.28em] text-white/45">{eyebrow}</p>
-      <h3 className="mt-2.5 text-lg font-semibold tracking-[-0.02em] text-white">{title}</h3>
-      <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">{body}</p>
-      {detail ? <p className="mt-3 text-xs uppercase tracking-[0.16em] text-white/38">{detail}</p> : null}
-    </div>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+      <span
+        style={{
+          minWidth: 20,
+          textAlign: 'center',
+          padding: '2px 6px',
+          borderRadius: 5,
+          color: t.keycapText,
+          background: t.keycapBg,
+          border: '1px solid ' + t.keycapBorder,
+          fontSize: 10.5,
+        }}
+      >
+        {k}
+      </span>
+      <span style={{ color: t.hintLabel }}>{label}</span>
+    </span>
   )
 }
 
-function PlaceholderResults({
+function EmptyState({
+  t,
   hasRoots,
   status,
+  loading,
+  query,
+  noMatches,
 }: {
+  t: Theme
   hasRoots: boolean
   status: StatusSnapshot | null
+  loading: boolean
+  query: string
+  noMatches: boolean
 }) {
-  const rows = [
-    hasRoots
-      ? {
-          title: 'Start typing to search',
-          detail: `${status?.indexedEntries?.toLocaleString() ?? '0'} indexed entries ready`,
-        }
-      : {
-          title: 'Add a root in Roots',
-          detail: 'Search needs at least one indexed folder',
-        },
-    {
-      title: 'Try short filename fragments',
-      detail: 'Examples: report, invoice, ext:pdf, type:folder',
-    },
-    {
-      title: 'Enter opens the top result',
-      detail: 'Ctrl+Enter reveals it in the parent folder',
-    },
-    {
-      title: 'Roots and Settings stay off to the side',
-      detail: 'The main window stays focused on search only',
-    },
-  ]
+  let title: string
+  let detail: string
+
+  if (loading) {
+    title = `Searching for “${query}”`
+    detail = status?.message || 'Ranking name and path matches…'
+  } else if (noMatches) {
+    title = `Nothing matched “${query}”`
+    detail = hasRoots
+      ? `${status?.indexedEntries?.toLocaleString() ?? '0'} indexed entries searched`
+      : 'Add a root to search anything'
+  } else if (!hasRoots) {
+    title = 'Add a root to start'
+    detail = 'Open Roots and pick a folder for Searchy to index'
+  } else {
+    title = 'Start typing to search'
+    detail = `${status?.indexedEntries?.toLocaleString() ?? '0'} indexed entries ready`
+  }
 
   return (
-    <div className="grid min-w-0 gap-2">
-      {rows.map((row, index) => (
-        <div
-          key={row.title}
-          className={`rounded-[1.3rem] border px-4 py-3 ${
-            index === 0
-              ? 'border-white/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.07),rgba(255,255,255,0.03))]'
-              : 'border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.045),rgba(255,255,255,0.02))]'
-          }`}
-        >
-          <div className="text-[0.98rem] font-semibold tracking-[-0.02em] text-white">{row.title}</div>
-          <div className="mt-1 text-[13px] text-slate-400">{row.detail}</div>
-        </div>
-      ))}
+    <div style={{ padding: '34px 16px', textAlign: 'center' }}>
+      <div style={{ fontSize: 14.5, color: t.muted }}>{title}</div>
+      <div
+        style={{
+          fontFamily: "'IBM Plex Mono', monospace",
+          fontSize: 11,
+          color: t.faint,
+          marginTop: 7,
+        }}
+      >
+        {detail}
+      </div>
     </div>
   )
 }
 
 function SlideOverPanel({
+  t,
   title,
   eyebrow,
   open,
   onClose,
   children,
 }: {
+  t: Theme
   title: string
   eyebrow: string
   open: boolean
@@ -135,54 +133,85 @@ function SlideOverPanel({
   return (
     <>
       <div
-        className={`absolute inset-0 z-20 bg-slate-950/55 backdrop-blur-sm transition ${
-          open ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'
-        }`}
         onClick={onClose}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          zIndex: 20,
+          background: 'rgba(3,7,14,0.55)',
+          backdropFilter: 'blur(4px)',
+          WebkitBackdropFilter: 'blur(4px)',
+          transition: 'opacity .25s',
+          opacity: open ? 1 : 0,
+          pointerEvents: open ? 'auto' : 'none',
+        }}
       />
       <aside
-        className={`absolute inset-y-0 right-0 z-30 flex w-full max-w-[34rem] flex-col border-l border-white/10 bg-[linear-gradient(180deg,rgba(8,15,29,0.96),rgba(8,15,29,0.9))] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl transition duration-300 sm:p-5 ${
-          open ? 'translate-x-0 opacity-100' : 'pointer-events-none translate-x-full opacity-0'
-        }`}
+        style={{
+          position: 'absolute',
+          top: 0,
+          bottom: 0,
+          right: 0,
+          zIndex: 30,
+          display: 'flex',
+          flexDirection: 'column',
+          width: '100%',
+          maxWidth: '34rem',
+          padding: 16,
+          background: t.panel,
+          backdropFilter: t.blur,
+          WebkitBackdropFilter: t.blur,
+          borderLeft: '1px solid ' + t.panelBorder,
+          boxShadow: t.shadow,
+          transition: 'transform .3s ease, opacity .3s ease',
+          transform: open ? 'translateX(0)' : 'translateX(100%)',
+          opacity: open ? 1 : 0,
+          pointerEvents: open ? 'auto' : 'none',
+        }}
       >
-        <div className="mb-4 flex items-start justify-between gap-4">
+        <div style={{ marginBottom: 16, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
           <div>
-            <p className="font-['IBM_Plex_Mono'] text-[11px] uppercase tracking-[0.28em] text-white/45">{eyebrow}</p>
-            <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-white">{title}</h2>
+            <p
+              style={{
+                fontFamily: "'IBM Plex Mono', monospace",
+                fontSize: 11,
+                textTransform: 'uppercase',
+                letterSpacing: '0.28em',
+                color: t.faint,
+              }}
+            >
+              {eyebrow}
+            </p>
+            <h2 style={{ marginTop: 8, fontSize: 24, fontWeight: 600, letterSpacing: '-0.03em', color: t.text }}>
+              {title}
+            </h2>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full border border-white/12 px-3 py-1 text-xs uppercase tracking-[0.18em] text-slate-300 transition hover:border-white/24 hover:text-white"
+            style={{
+              borderRadius: 999,
+              border: '1px solid ' + t.lineStrong,
+              padding: '4px 12px',
+              fontSize: 12,
+              textTransform: 'uppercase',
+              letterSpacing: '0.18em',
+              color: t.muted,
+              background: 'transparent',
+            }}
           >
             Close
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto pr-1">{children}</div>
+        <div style={{ minHeight: 0, flex: 1, overflowY: 'auto', paddingRight: 4 }}>{children}</div>
       </aside>
     </>
   )
 }
 
-function formatRelativeStatusTime(unix: number | null | undefined) {
-  if (!unix) {
-    return 'No reconcile yet'
-  }
-
-  const seconds = Math.max(0, Math.floor(Date.now() / 1000) - unix)
-  if (seconds < 60) {
-    return `${seconds}s ago`
-  }
-  if (seconds < 3600) {
-    return `${Math.floor(seconds / 60)}m ago`
-  }
-  if (seconds < 86400) {
-    return `${Math.floor(seconds / 3600)}h ago`
-  }
-  return `${Math.floor(seconds / 86400)}d ago`
-}
-
 export function LauncherPage() {
+  const { theme: t, mode, setMode, accent, setAccent } = useAppTheme()
+
   const [activePanel, setActivePanel] = useState<'roots' | 'settings' | null>(null)
   const [query, setQuery] = useState('')
   const [showSyntaxHelp, setShowSyntaxHelp] = useState(false)
@@ -195,64 +224,27 @@ export function LauncherPage() {
   const [rootError, setRootError] = useState<string | null>(null)
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [scopeRoot, setScopeRoot] = useState<string | null>(null)
+  const [flash, setFlash] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
+
   const syntax = parseSearchSyntax(query)
   const effectiveQuery = syntax.cleanQuery
   const enabledRoots = roots.filter((r) => r.enabled)
   const { loading, results } = useSearch(effectiveQuery, settings, scopeRoot)
   const hideOnDismiss = status?.launcherShortcutEnabled ?? false
   const syntaxExamples = getSearchSyntaxExamples()
-  const isJokeMode = Boolean(syntax.jokeTheme)
-  const shellClass =
-    syntax.jokeTheme === 'confetti'
-      ? 'border-amber-300/16 bg-[linear-gradient(180deg,rgba(255,248,220,0.1),rgba(251,191,36,0.04),rgba(255,255,255,0.03))] shadow-[0_26px_90px_rgba(251,191,36,0.12)]'
-      : syntax.jokeTheme === 'disco'
-        ? 'border-fuchsia-300/18 bg-[linear-gradient(180deg,rgba(255,0,110,0.08),rgba(56,189,248,0.05),rgba(255,255,255,0.03))] shadow-[0_28px_96px_rgba(255,0,110,0.12)]'
-        : syntax.jokeTheme === 'matrix'
-          ? 'border-emerald-300/18 bg-[linear-gradient(180deg,rgba(6,78,59,0.14),rgba(2,6,23,0.18),rgba(255,255,255,0.02))] shadow-[0_26px_90px_rgba(16,185,129,0.1)]'
-          : syntax.jokeTheme === 'synthwave'
-            ? 'border-cyan-300/18 bg-[linear-gradient(180deg,rgba(168,85,247,0.08),rgba(56,189,248,0.05),rgba(255,255,255,0.03))] shadow-[0_28px_96px_rgba(56,189,248,0.12)]'
-            : 'border-[var(--line)] bg-[var(--panel-strong)] shadow-[var(--shadow)]'
-  const queryShellClass =
-    syntax.jokeTheme === 'confetti'
-      ? 'border-amber-300/14 bg-[linear-gradient(180deg,rgba(251,191,36,0.08),rgba(255,255,255,0.03))]'
-      : syntax.jokeTheme === 'disco'
-        ? 'border-fuchsia-300/16 bg-[linear-gradient(180deg,rgba(255,0,110,0.08),rgba(255,255,255,0.03))]'
-        : syntax.jokeTheme === 'matrix'
-          ? 'border-emerald-300/14 bg-[linear-gradient(180deg,rgba(16,185,129,0.08),rgba(255,255,255,0.02))]'
-          : syntax.jokeTheme === 'synthwave'
-            ? 'border-cyan-300/16 bg-[linear-gradient(180deg,rgba(56,189,248,0.08),rgba(255,255,255,0.03))]'
-            : 'border-white/8 bg-slate-950/30'
-  const inputClass =
-    syntax.jokeTheme === 'confetti'
-      ? 'border-amber-300/18 bg-white/[0.05] focus:border-amber-200/45 focus:shadow-[0_0_0_4px_rgba(251,191,36,0.08)]'
-      : syntax.jokeTheme === 'disco'
-        ? 'border-fuchsia-300/20 bg-white/[0.05] focus:border-fuchsia-200/45 focus:shadow-[0_0_0_4px_rgba(217,70,239,0.08)]'
-        : syntax.jokeTheme === 'matrix'
-          ? 'border-emerald-300/20 bg-emerald-950/18 focus:border-emerald-200/45 focus:shadow-[0_0_0_4px_rgba(16,185,129,0.08)]'
-          : syntax.jokeTheme === 'synthwave'
-            ? 'border-cyan-300/20 bg-white/[0.05] focus:border-cyan-200/45 focus:shadow-[0_0_0_4px_rgba(56,189,248,0.08)]'
-            : 'border-white/10 bg-white/[0.03] focus:border-orange-300/40'
-  const accentChipClass =
-    syntax.jokeTheme === 'confetti'
-      ? 'border-amber-300/20 bg-amber-300/10 text-amber-100'
-      : syntax.jokeTheme === 'disco'
-        ? 'border-fuchsia-300/20 bg-fuchsia-300/10 text-fuchsia-100'
-        : syntax.jokeTheme === 'matrix'
-          ? 'border-emerald-300/20 bg-emerald-300/10 text-emerald-100'
-          : syntax.jokeTheme === 'synthwave'
-            ? 'border-cyan-300/20 bg-cyan-300/10 text-cyan-100'
-            : 'border-white/10 bg-white/[0.04] text-slate-200'
-  const helpButtonClass =
-    syntax.jokeTheme === 'confetti'
-      ? 'hover:border-amber-200/28 hover:text-amber-50 hover:bg-amber-300/10'
-      : syntax.jokeTheme === 'disco'
-        ? 'hover:border-fuchsia-200/28 hover:text-fuchsia-50 hover:bg-fuchsia-300/10'
-        : syntax.jokeTheme === 'matrix'
-          ? 'hover:border-emerald-200/28 hover:text-emerald-50 hover:bg-emerald-300/10'
-          : syntax.jokeTheme === 'synthwave'
-            ? 'hover:border-cyan-200/28 hover:text-cyan-50 hover:bg-cyan-300/10'
-            : 'hover:border-white/20 hover:text-white'
+
+  const hi = mix(accent, '#ffffff', 0.2)
+  const lo = mix(accent, '#000000', 0.1)
+
+  const showAttentionBanner = Boolean(status && (status.watcherState !== 'healthy' || status.offlineRoots.length > 0))
+  const statusDotColor = showAttentionBanner ? t.mode === 'light' ? '#e0a03a' : '#ffd166' : accent
+
+  function triggerFlash(name: string) {
+    setFlash(name)
+    window.setTimeout(() => setFlash((current) => (current === name ? null : current)), 900)
+  }
+
   useEffect(() => {
     void Promise.all([getRoots(), getSettings(), getStatus(), getExcludeRules()]).then(
       ([nextRoots, nextSettings, nextStatus, nextExcludeRules]) => {
@@ -272,7 +264,6 @@ export function LauncherPage() {
       if (cancelled) {
         return
       }
-
       setQuery('')
       setSelectedIndex(0)
       setActivePanel(null)
@@ -295,6 +286,10 @@ export function LauncherPage() {
   }, [results])
 
   useEffect(() => {
+    inputRef.current?.focus()
+  }, [])
+
+  useEffect(() => {
     if (scopeRoot !== null && !enabledRoots.some((r) => r.path === scopeRoot)) {
       setScopeRoot(null)
     }
@@ -314,6 +309,7 @@ export function LauncherPage() {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && results[selectedIndex]) {
         event.preventDefault()
+        triggerFlash(results[selectedIndex].name)
         if (hideOnDismiss) {
           void hideLauncherWindow().then(() => revealPath(results[selectedIndex].path))
         } else {
@@ -343,6 +339,7 @@ export function LauncherPage() {
       if (event.key === 'Enter' && results[selectedIndex]) {
         event.preventDefault()
         void recordOpen(results[selectedIndex].path)
+        triggerFlash(results[selectedIndex].name)
         if (hideOnDismiss) {
           void hideLauncherWindow().then(() => openPath(results[selectedIndex].path))
         } else {
@@ -357,7 +354,14 @@ export function LauncherPage() {
           setActivePanel(null)
           return
         }
-        setQuery('')
+        if (showSyntaxHelp) {
+          setShowSyntaxHelp(false)
+          return
+        }
+        if (query) {
+          setQuery('')
+          return
+        }
         if (hideOnDismiss) {
           void hideLauncherWindow()
         }
@@ -366,7 +370,7 @@ export function LauncherPage() {
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [activePanel, hideOnDismiss, results, selectedIndex])
+  }, [activePanel, hideOnDismiss, results, selectedIndex, showSyntaxHelp, query])
 
   async function refreshSidebarData() {
     const [nextRoots, nextStatus, nextExcludeRules] = await Promise.all([getRoots(), getStatus(), getExcludeRules()])
@@ -379,10 +383,8 @@ export function LauncherPage() {
     if (!draftRoot.trim()) {
       return
     }
-
     setRootBusy(true)
     setRootError(null)
-
     try {
       await addRoot(draftRoot.trim())
       setDraftRoot('')
@@ -397,13 +399,11 @@ export function LauncherPage() {
   async function handlePickRoot() {
     setRootBusy(true)
     setRootError(null)
-
     try {
       const selected = await pickDirectory()
       if (!selected) {
         return
       }
-
       setDraftRoot(selected)
       await addRoot(selected)
       setDraftRoot('')
@@ -423,7 +423,6 @@ export function LauncherPage() {
   async function handleToggleRoot(root: RootRecord, field: 'enabled' | 'watchEnabled', value: boolean) {
     setRootBusy(true)
     setRootError(null)
-
     try {
       await updateRoot(
         root.path,
@@ -442,7 +441,6 @@ export function LauncherPage() {
   async function handleRescanRoot(path: string) {
     setRootBusy(true)
     setRootError(null)
-
     try {
       await rescanRoot(path)
       await refreshSidebarData()
@@ -478,231 +476,395 @@ export function LauncherPage() {
 
   const trimmedQuery = effectiveQuery.trim()
   const hasRoots = roots.length > 0
-  const compactButtonClass =
-    'rounded-full border border-white/10 px-2.5 py-1 font-["IBM_Plex_Mono"] text-[10px] uppercase tracking-[0.18em] text-slate-300 transition hover:border-white/22 hover:bg-white/[0.05] hover:text-white'
-  const showAttentionBanner = Boolean(status && (status.watcherState !== 'healthy' || status.offlineRoots.length > 0))
-  const showShortcutWarning = Boolean(status && !status.launcherShortcutEnabled)
-  const statusSummary = status
-    ? [
-        `${status.indexedEntries.toLocaleString()} entries`,
-        `reconciled ${formatRelativeStatusTime(status.lastReconcileUnix)}`,
-        showAttentionBanner ? 'watcher degraded' : null,
-        showShortcutWarning ? 'shortcut unavailable' : null,
-      ]
-        .filter(Boolean)
-        .join(' · ')
-    : null
+  const showResults = Boolean(trimmedQuery) && !loading && results.length > 0
+
+  const btnStyle = controlButtonStyle(t)
+  const scopeLabel =
+    scopeRoot === null ? 'Everything' : scopeRoot.split('/').filter(Boolean).pop() ?? scopeRoot
+
+  function cycleScope() {
+    if (scopeRoot === null) {
+      setScopeRoot(enabledRoots[0].path)
+      return
+    }
+    const currentIndex = enabledRoots.findIndex((r) => r.path === scopeRoot)
+    const nextIndex = currentIndex + 1
+    setScopeRoot(nextIndex >= enabledRoots.length ? null : enabledRoots[nextIndex].path)
+  }
+
+  const chipStyle: CSSProperties = {
+    fontFamily: "'IBM Plex Mono', monospace",
+    fontSize: 11,
+    color: accent,
+    background: rgba(accent, 0.12),
+    border: '1px solid ' + rgba(accent, 0.3),
+    borderRadius: 7,
+    padding: '4px 9px',
+  }
 
   return (
-    <main className="mx-auto flex h-screen w-full items-center justify-center overflow-hidden px-4 py-5 sm:px-5">
-      <section
-        className={`relative flex h-full max-h-[530px] w-full max-w-[760px] flex-col overflow-hidden rounded-[1.5rem] border p-3 backdrop-blur-xl ${shellClass}`}
-      >
-        <JokeOverlay theme={syntax.jokeTheme} />
-        {isJokeMode ? (
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.08),transparent_24%),radial-gradient(circle_at_bottom_left,rgba(255,255,255,0.05),transparent_28%)]" />
-        ) : null}
-        <div className={`relative flex min-h-0 flex-1 flex-col min-w-0 transition ${activePanel ? 'blur-[1px]' : ''}`}>
-          <div className="flex min-h-0 flex-1 flex-col min-w-0">
-            <div className={`rounded-[1.35rem] border p-2.5 ${queryShellClass}`}>
-              <label className="block text-sm text-slate-300">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <span className="font-['IBM_Plex_Mono'] text-xs uppercase tracking-[0.22em] text-white/55">
-                      Query
-                    </span>
-                    {statusSummary ? (
-                      <span className="truncate text-[11px] text-slate-400">
-                        {statusSummary}
-                      </span>
-                    ) : null}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {enabledRoots.length > 1 ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (scopeRoot === null) {
-                            setScopeRoot(enabledRoots[0].path)
-                          } else {
-                            const currentIndex = enabledRoots.findIndex((r) => r.path === scopeRoot)
-                            const nextIndex = currentIndex + 1
-                            if (nextIndex >= enabledRoots.length) {
-                              setScopeRoot(null)
-                            } else {
-                              setScopeRoot(enabledRoots[nextIndex].path)
-                            }
-                          }
-                        }}
-                        className={compactButtonClass}
-                      >
-                        {scopeRoot === null
-                          ? 'Everything'
-                          : scopeRoot.split('/').filter(Boolean).pop() ?? scopeRoot}
-                      </button>
-                    ) : null}
-                    <button type="button" onClick={() => setActivePanel('roots')} className={compactButtonClass}>
-                      Roots
-                    </button>
-                    <button type="button" onClick={() => setActivePanel('settings')} className={compactButtonClass}>
-                      Settings
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowSyntaxHelp((current) => !current)}
-                      className={`rounded-full border border-white/10 px-2.5 py-1 font-['IBM_Plex_Mono'] text-[10px] uppercase tracking-[0.18em] text-white/65 transition ${helpButtonClass}`}
-                    >
-                      {showSyntaxHelp ? 'Hide syntax' : 'Syntax'}
-                    </button>
-                  </div>
-                </div>
-                <input
-                  ref={inputRef}
-                  autoFocus
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Type part of a filename or path..."
-                  className={`mt-2 w-full rounded-[0.95rem] border px-4 py-3 text-[1rem] text-white outline-none placeholder:text-slate-500 transition ${inputClass}`}
-                />
-              </label>
+    <div
+      style={{
+        position: 'relative',
+        height: '100%',
+        display: 'grid',
+        placeItems: 'center',
+        overflow: 'hidden',
+        background: 'transparent',
+      }}
+    >
+      {/* accent glow behind the panel */}
+      <div
+        style={{
+          position: 'absolute',
+          top: '-24%',
+          left: '14%',
+          width: 420,
+          height: 420,
+          borderRadius: '50%',
+          background: rgba(accent, t.glow[0]),
+          filter: 'blur(120px)',
+          pointerEvents: 'none',
+        }}
+      />
+      <div
+        style={{
+          position: 'absolute',
+          bottom: '-28%',
+          right: '10%',
+          width: 460,
+          height: 460,
+          borderRadius: '50%',
+          background: rgba(accent, t.glow[1]),
+          filter: 'blur(130px)',
+          pointerEvents: 'none',
+        }}
+      />
 
-              {syntax.chips.length > 0 ? (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {syntax.chips.map((chip) => (
-                    <span
-                      key={chip.key}
-                      className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${
-                        chip.negated
-                          ? 'border-rose-300/20 bg-rose-300/8 text-rose-100/85'
-                          : accentChipClass
-                      }`}
-                    >
-                      {chip.negated ? 'Not ' : ''}
-                      {chip.label}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
+      {/* fixed controls: management + theme + accent */}
+      <div style={{ position: 'fixed', top: 18, right: 18, zIndex: 20, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+        <button onClick={() => setShowSyntaxHelp((s) => !s)} style={btnStyle} title="Search syntax">
+          Syntax
+        </button>
+        <button onClick={() => setActivePanel('roots')} style={btnStyle}>
+          Roots
+        </button>
+        <button onClick={() => setActivePanel('settings')} style={btnStyle}>
+          Settings
+        </button>
+        <ThemeControls ac={accent} setAc={setAccent} t={t} mode={mode} setMode={setMode} />
+      </div>
 
-              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-400">
-                <span>Enter open</span>
-                <span>Ctrl+Enter reveal</span>
-                <span>Ctrl+C copy path</span>
-                <span>{hideOnDismiss ? 'Esc hide' : 'Esc clear'}</span>
-                <span>{loading ? 'Searching…' : `${results.length} results`}</span>
-              </div>
+      <div style={{ width: '100%', padding: '0 24px', display: 'flex', justifyContent: 'center' }}>
+        <section
+          style={{
+            position: 'relative',
+            width: '100%',
+            maxWidth: 620,
+            borderRadius: 20,
+            overflow: 'hidden',
+            background: t.panel,
+            backdropFilter: t.blur,
+            WebkitBackdropFilter: t.blur,
+            border: '1px solid ' + t.panelBorder,
+            boxShadow: t.shadow,
+            display: 'flex',
+            flexDirection: 'column',
+            maxHeight: 500,
+          }}
+        >
+          <JokeOverlay theme={syntax.jokeTheme} />
 
-              {showSyntaxHelp ? (
-                <div className="mt-2.5 rounded-[1rem] border border-white/8 bg-white/[0.03] px-3 py-2.5">
-                  <div className="flex flex-wrap gap-2">
-                    {syntaxExamples.map((example) => (
-                      <button
-                        key={example}
-                        type="button"
-                        onClick={() => setQuery(example)}
-                        className={`rounded-full border border-white/10 px-3 py-1 font-['IBM_Plex_Mono'] text-[11px] text-slate-200 transition ${helpButtonClass}`}
-                      >
-                        {example}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="mt-3 text-xs leading-6 text-slate-400">
-                    Filters are optional. Try <code className="rounded bg-white/8 px-1.5 py-0.5 text-white/80">ext:pdf</code>,{' '}
-                    <code className="rounded bg-white/8 px-1.5 py-0.5 text-white/80">in:docs</code>,{' '}
-                    <code className="rounded bg-white/8 px-1.5 py-0.5 text-white/80">type:folder</code>,{' '}
-                    <code className="rounded bg-white/8 px-1.5 py-0.5 text-white/80">hidden:false</code>, or aliases like{' '}
-                    <code className="rounded bg-white/8 px-1.5 py-0.5 text-white/80">under:archive</code> and{' '}
-                    <code className="rounded bg-white/8 px-1.5 py-0.5 text-white/80">is:folder</code>.
-                  </p>
-                  <p className="mt-2 text-xs leading-6 text-slate-500">
-                    Fun mode is visual-only: try <code className="rounded bg-white/8 px-1.5 py-0.5 text-white/80">is:joke synthwave</code>,{' '}
-                    <code className="rounded bg-white/8 px-1.5 py-0.5 text-white/80">is:joke matrix</code>, or{' '}
-                    <code className="rounded bg-white/8 px-1.5 py-0.5 text-white/80">is:joke confetti report</code>.
-                  </p>
-                </div>
-              ) : null}
-            </div>
-
-            {status?.inotifyLimitWarning ? (
-              <div className="mt-2 rounded-[1rem] border border-amber-400/20 bg-amber-400/8 px-3 py-2 text-[11px] text-amber-200">
-                inotify watch limit approaching — run:{' '}
-                <code className="rounded bg-white/8 px-1.5 py-0.5 font-['IBM_Plex_Mono'] text-amber-100">
-                  sudo sysctl fs.inotify.max_user_watches=524288
-                </code>
-              </div>
-            ) : null}
-
-            <div className="mt-2 min-h-0 min-w-0 flex-1 overflow-hidden">
-              {!trimmedQuery ? (
-                <PlaceholderResults hasRoots={hasRoots} status={status} />
-              ) : loading ? (
-                <SearchStateCard
-                  eyebrow="Searching"
-                  title={`Looking for "${trimmedQuery}"`}
-                  body="Ranking name and path matches. The first result should settle almost immediately once the current query finishes."
-                  tone="loading"
-                  detail={status?.message}
-                />
-              ) : results.length === 0 ? (
-                <SearchStateCard
-                  eyebrow="No matches"
-                  title={`Nothing matched "${trimmedQuery}"`}
-                  body="Try a shorter fragment, remove punctuation, or search for a parent folder name instead of the full filename."
-                  tone="empty"
-                  detail={hasRoots ? `${status?.indexedEntries?.toLocaleString() ?? '0'} indexed entries searched` : 'Add a root to search anything'}
-                />
-              ) : (
-                <ResultList
-                  results={results}
-                  query={effectiveQuery}
-                  theme={syntax.jokeTheme}
-                  onOpen={(path) => { void recordOpen(path); void openPath(path) }}
-                  onReveal={(path) => void revealPath(path)}
-                  selectedIndex={selectedIndex}
-                  setSelectedIndex={setSelectedIndex}
-                />
-              )}
+          {/* title bar */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              padding: '11px 16px',
+              borderBottom: '1px solid ' + t.lineSoft,
+            }}
+          >
+            <Mark size={19} hi={hi} lo={lo} knock={t.glyphKnock} gid="title" />
+            <span style={{ fontSize: 14, fontWeight: 600, letterSpacing: '-0.02em', color: t.text }}>
+              Searchy
+              <span style={{ color: accent }}>_</span>
+            </span>
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 7 }}>
+              <span style={{ width: 9, height: 9, borderRadius: 5, background: t.dotOff }} />
+              <span style={{ width: 9, height: 9, borderRadius: 5, background: t.dotOff }} />
+              <span
+                style={{ width: 9, height: 9, borderRadius: 5, background: statusDotColor }}
+                title={showAttentionBanner ? 'Watcher needs attention' : 'Healthy'}
+              />
             </div>
           </div>
-        </div>
 
-        <SlideOverPanel
-          title="Indexed roots"
-          eyebrow="Management"
-          open={activePanel === 'roots'}
-          onClose={() => setActivePanel(null)}
-        >
-          <RootsPanel
-            roots={roots}
-            draftRoot={draftRoot}
-            setDraftRoot={setDraftRoot}
-            busy={rootBusy}
-            errorMessage={rootError}
-            onAddRoot={() => void handleAddRoot()}
-            onPickRoot={() => void handlePickRoot()}
-            onRemoveRoot={(path) => void handleRemoveRoot(path)}
-            onToggleRoot={(root, field, value) => void handleToggleRoot(root, field, value)}
-            onRescanRoot={(path) => void handleRescanRoot(path)}
-          />
-        </SlideOverPanel>
+          {/* search */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '19px 20px' }}>
+            <SearchGlyph size={20} color={accent} />
+            <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center' }}>
+              <input
+                ref={inputRef}
+                autoFocus
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search files by name…"
+                style={{
+                  width: '100%',
+                  fontSize: 22,
+                  color: t.text,
+                  letterSpacing: '-0.01em',
+                  caretColor: accent,
+                  fontFamily: 'inherit',
+                  border: 'none',
+                  outline: 'none',
+                  background: 'none',
+                }}
+              />
+              {!query && (
+                <span
+                  className="blink"
+                  style={{ position: 'absolute', left: 0, fontSize: 22, color: accent, pointerEvents: 'none' }}
+                >
+                  ▏
+                </span>
+              )}
+            </div>
+            {enabledRoots.length > 1 && (
+              <button
+                type="button"
+                onClick={cycleScope}
+                style={{
+                  fontFamily: "'IBM Plex Mono', monospace",
+                  fontSize: 11,
+                  color: scopeRoot ? accent : t.muted,
+                  background: scopeRoot ? rgba(accent, 0.12) : t.chipBg,
+                  border: '1px solid ' + (scopeRoot ? rgba(accent, 0.3) : t.lineSoft),
+                  borderRadius: 7,
+                  padding: '4px 9px',
+                  flexShrink: 0,
+                  maxWidth: 150,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+                title="Cycle search scope"
+              >
+                {scopeLabel}
+              </button>
+            )}
+          </div>
 
-        <SlideOverPanel
-          title="Settings"
-          eyebrow="Management"
-          open={activePanel === 'settings'}
-          onClose={() => setActivePanel(null)}
-        >
-          <SettingsPanel
-            settings={settings}
-            status={status}
-            excludeRules={excludeRules}
-            onToggle={(key, value) => void handleToggle(key, value)}
-            onRebuild={() => void handleRebuild()}
-            onAddExcludeRule={(pattern, ruleType, appliesTo) => void handleAddExcludeRule(pattern, ruleType, appliesTo)}
-            onRemoveExcludeRule={(id) => void handleRemoveExcludeRule(id)}
-          />
-        </SlideOverPanel>
-      </section>
-    </main>
+          {/* syntax chips */}
+          {syntax.chips.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 20px 8px' }}>
+              {syntax.chips.map((chip) => (
+                <span
+                  key={chip.key}
+                  style={{
+                    ...chipStyle,
+                    fontSize: 10.5,
+                    padding: '3px 8px',
+                    ...(chip.negated
+                      ? { color: '#ff9db3', background: 'rgba(255,93,143,0.12)', border: '1px solid rgba(255,93,143,0.3)' }
+                      : null),
+                  }}
+                >
+                  {chip.negated ? 'Not ' : ''}
+                  {chip.label}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* syntax help */}
+          {showSyntaxHelp && (
+            <div style={{ padding: '0 20px 10px' }}>
+              <div
+                style={{
+                  borderRadius: 12,
+                  border: '1px solid ' + t.lineSoft,
+                  background: t.fieldBg,
+                  padding: '12px 14px',
+                }}
+              >
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {syntaxExamples.map((example) => (
+                    <button
+                      key={example}
+                      type="button"
+                      onClick={() => {
+                        setQuery(example)
+                        setShowSyntaxHelp(false)
+                        inputRef.current?.focus()
+                      }}
+                      style={{
+                        borderRadius: 999,
+                        border: '1px solid ' + t.lineSoft,
+                        padding: '5px 12px',
+                        fontFamily: "'IBM Plex Mono', monospace",
+                        fontSize: 11,
+                        color: t.muted,
+                        background: 'transparent',
+                      }}
+                    >
+                      {example}
+                    </button>
+                  ))}
+                </div>
+                <p style={{ marginTop: 10, fontSize: 12, lineHeight: 1.6, color: t.faint }}>
+                  Filters are optional — try ext:pdf, in:docs, type:folder, or hidden:false. Fun mode is visual only:
+                  is:joke synthwave, is:joke matrix, is:joke confetti.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* inotify warning */}
+          {status?.inotifyLimitWarning && (
+            <div style={{ padding: '0 20px 8px' }}>
+              <div
+                style={{
+                  borderRadius: 10,
+                  border: '1px solid rgba(255,209,102,0.25)',
+                  background: 'rgba(255,209,102,0.1)',
+                  padding: '8px 12px',
+                  fontSize: 11,
+                  color: t.mode === 'light' ? '#8a6d1f' : '#ffd88a',
+                }}
+              >
+                inotify watch limit approaching — run: sudo sysctl fs.inotify.max_user_watches=524288
+              </div>
+            </div>
+          )}
+
+          {/* results */}
+          <div style={{ flex: 1, minHeight: 0, maxHeight: 340, overflow: 'hidden', padding: '0 10px' }}>
+            {showResults ? (
+              <ResultList
+                results={results}
+                query={effectiveQuery}
+                t={t}
+                accent={accent}
+                onOpen={(path) => {
+                  const target = results.find((r) => r.path === path)
+                  if (target) {
+                    triggerFlash(target.name)
+                  }
+                  void recordOpen(path)
+                  if (hideOnDismiss) {
+                    void hideLauncherWindow().then(() => openPath(path))
+                  } else {
+                    void openPath(path)
+                  }
+                }}
+                selectedIndex={selectedIndex}
+                setSelectedIndex={setSelectedIndex}
+              />
+            ) : (
+              <EmptyState
+                t={t}
+                hasRoots={hasRoots}
+                status={status}
+                loading={Boolean(trimmedQuery) && loading}
+                query={trimmedQuery}
+                noMatches={Boolean(trimmedQuery) && !loading && results.length === 0}
+              />
+            )}
+          </div>
+
+          {/* footer */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 16,
+              padding: '11px 18px',
+              borderTop: '1px solid ' + t.lineSoft,
+              background: t.footerBg,
+              fontFamily: "'IBM Plex Mono', monospace",
+              fontSize: 11,
+              color: t.muted,
+              flexWrap: 'wrap',
+            }}
+          >
+            <Hint k="↑↓" label="navigate" t={t} />
+            <Hint k="↵" label="open" t={t} />
+            <Hint k="⌘↵" label="reveal" t={t} />
+            <Hint k="esc" label={hideOnDismiss ? 'hide' : 'clear'} t={t} />
+            <span style={{ marginLeft: 'auto', color: t.faint }}>
+              {flash ? (
+                <span style={{ color: accent }}>opening {flash}</span>
+              ) : loading && trimmedQuery ? (
+                'searching…'
+              ) : (
+                <>
+                  {results.length} result{results.length !== 1 ? 's' : ''}
+                </>
+              )}
+            </span>
+          </div>
+
+          <SlideOverPanel
+            t={t}
+            title="Indexed roots"
+            eyebrow="Management"
+            open={activePanel === 'roots'}
+            onClose={() => setActivePanel(null)}
+          >
+            <RootsPanel
+              roots={roots}
+              draftRoot={draftRoot}
+              setDraftRoot={setDraftRoot}
+              busy={rootBusy}
+              errorMessage={rootError}
+              onAddRoot={() => void handleAddRoot()}
+              onPickRoot={() => void handlePickRoot()}
+              onRemoveRoot={(path) => void handleRemoveRoot(path)}
+              onToggleRoot={(root, field, value) => void handleToggleRoot(root, field, value)}
+              onRescanRoot={(path) => void handleRescanRoot(path)}
+            />
+          </SlideOverPanel>
+
+          <SlideOverPanel
+            t={t}
+            title="Settings"
+            eyebrow="Management"
+            open={activePanel === 'settings'}
+            onClose={() => setActivePanel(null)}
+          >
+            <SettingsPanel
+              settings={settings}
+              status={status}
+              excludeRules={excludeRules}
+              onToggle={(key, value) => void handleToggle(key, value)}
+              onRebuild={() => void handleRebuild()}
+              onAddExcludeRule={(pattern, ruleType, appliesTo) => void handleAddExcludeRule(pattern, ruleType, appliesTo)}
+              onRemoveExcludeRule={(id) => void handleRemoveExcludeRule(id)}
+            />
+          </SlideOverPanel>
+        </section>
+      </div>
+
+      {/* caption */}
+      <div
+        style={{
+          position: 'absolute',
+          bottom: 16,
+          left: 0,
+          right: 0,
+          textAlign: 'center',
+          fontFamily: "'IBM Plex Mono', monospace",
+          fontSize: 10,
+          letterSpacing: '0.28em',
+          color: rgba(t.bd, 0.4),
+          textTransform: 'uppercase',
+          pointerEvents: 'none',
+        }}
+      >
+        Searchy · filename-first file search
+      </div>
+    </div>
   )
 }
