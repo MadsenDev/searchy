@@ -116,6 +116,20 @@ async fn setup_wayland_shortcut(app: AppHandle) -> Result<(), ashpd::Error> {
 }
 
 fn main() {
+    // Work around a WebKitGTK DMABUF/GBM renderer bug that fails on some Linux
+    // GPU drivers ("Failed to create GBM buffer of size WxH: Invalid argument"),
+    // leaving the launcher window blank or unshowable. Disabling the DMABUF
+    // renderer forces a software-composited path that allocates reliably.
+    // Respect an explicit value if the user already set one.
+    #[cfg(target_os = "linux")]
+    if env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+        // SAFETY: set at the very start of main(), before any WebKitGTK or
+        // thread initialization, so no other thread can be reading the env.
+        unsafe {
+            env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        }
+    }
+
     let args = env::args().collect::<Vec<_>>();
     if args.iter().any(|arg| arg == "--daemon") {
         let socket_path = daemon_arg_value(&args, "--socket").unwrap_or_else(app_socket_path);
